@@ -5,7 +5,7 @@ const pool = oracledb.createPool({
   user: "icon",
   password: "b1ma",
   connectString: "localhost:1521/db19c",
-  poolMin: 2,
+  poolMin: 5,
   poolMax: 100,
   poolIncrement: 5,
 });
