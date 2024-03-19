@@ -6,39 +6,52 @@ class PerformanceController {
 
   async getUnderwritingData(req: Request, res: Response) {
     let connection;
-    let result;
+    let results;
     try {
-      const { year, branchCode } = req.query;
+      const year: number | any = req.query.year;
+      const branchCode: string | any = req.query.branchCode;
+
       connection = (await pool).getConnection();
       console.log("connected to database");
-      const results = (await connection).execute(
-        `select sum(PR_LC_PREM+PR_LC_EARTQUAKE+PR_LC_POLITICAL) direct_premium ,
-        PR_OS_CODE, PR_INT_AENT_CODE from uw_premium_register 
-         where EXTRACT(YEAR FROM pr_gl_date) = ${year} and pr_os_code=${branchCode}
-        GROUP BY 
+
+      // Construct SQL query with conditional parameter inclusion
+      let query = `
+       SELECT 
+    SUM(PR_LC_PREM + PR_LC_EARTQUAKE + PR_LC_POLITICAL) AS direct_premium,
     PR_OS_CODE,
     PR_INT_AENT_CODE 
-`
-      );
-      result = (await results).rows;
-      console.log(result);
-      const formattedData = result?.map((row: any) => {
-        return {
-          totalPremium: row[0],
-          branchCode: row[1],
-          intermediaryCode: row[2],
-          premiumDate: row[4],
-        };
+FROM 
+    uw_premium_register 
+WHERE 
+    EXTRACT(YEAR FROM pr_gl_date) = NVL(:year, EXTRACT(YEAR FROM pr_gl_date))
+    AND pr_os_code = NVL(:branchCode, pr_os_code)
+GROUP BY 
+    PR_OS_CODE,
+    PR_INT_AENT_CODE
+
+      `;
+
+      // Execute the query with parameters
+      results = (await connection).execute(query, {
+        year: year,
+        branchCode: branchCode,
       });
+
+      const formattedData = (await results).rows?.map((row: any) => ({
+        totalPremium: row[0],
+        branchCode: row[1],
+        intermediaryCode: row[2],
+      }));
 
       return res.status(200).json({ result: formattedData });
     } catch (error) {
-      console.error();
+      console.error(error);
+      return res.status(500).json({ error: "Internal server error" });
     } finally {
       try {
         if (connection) {
           (await connection).close();
-          console.info("connection closed success");
+          console.info("Connection closed successfully");
         }
       } catch (error) {
         console.error(error);
@@ -47,6 +60,6 @@ class PerformanceController {
   }
 }
 
-const perfomanceController = new PerformanceController();
+const performanceController = new PerformanceController();
 
-export default perfomanceController;
+export default performanceController;
