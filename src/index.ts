@@ -1,9 +1,10 @@
 import express, { Express, Request, Response } from "express";
 import perfomanceRouter from "./routes/perfomance-routes";
-
+import cors from "cors";
 const app: Express = express();
 
 const port = 5002;
+app.use(cors());
 
 app.get("/", (req: Request, res: Response) => {
   res.send("Server is running");
