@@ -3,8 +3,8 @@ import perfomanceController from "../controllers/perfomance-controller";
 
 const perfomanceRouter = Router();
 
-perfomanceRouter.get("/premiums", (req, res) => {
-  perfomanceController.getPremiums(req, res);
+perfomanceRouter.get("/underwriting", (req, res) => {
+  perfomanceController.getUnderwritingData(req, res);
 });
 
 export default perfomanceRouter;
