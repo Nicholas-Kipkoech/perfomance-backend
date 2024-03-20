@@ -16,21 +16,22 @@ class PerformanceController {
 
       // Construct SQL query with conditional parameter inclusion
       let query = `
-        SELECT SUM (
+         SELECT SUM (
                (PR_LC_PREM + PR_LC_EARTQUAKE + PR_LC_POLITICAL)
              * (CASE
                     WHEN pr_net_effect = 'Credit' THEN -1
                     WHEN pr_net_effect = 'Debit' THEN 1
                     ELSE 0
-                END))         direct_premium,
+                END))                direct_premium,
          PR_OS_CODE,
          PR_INT_AENT_CODE,
-         COUNT (pr_assr_ent_code)    no_of_clients
+         COUNT (pr_assr_ent_code)    no_of_clients,
+         pr_mc_code                  moto_code
     FROM uw_premium_register
    WHERE     EXTRACT (YEAR FROM pr_gl_date) =
              NVL ( :year, EXTRACT (YEAR FROM pr_gl_date))
          AND pr_os_code = NVL ( :branchCode, pr_os_code)
-GROUP BY PR_OS_CODE, PR_INT_AENT_CODE
+GROUP BY PR_OS_CODE, PR_INT_AENT_CODE, pr_mc_code
       `;
 
       // Execute the query with parameters
@@ -44,6 +45,7 @@ GROUP BY PR_OS_CODE, PR_INT_AENT_CODE
         branchCode: row[1],
         intermediaryCode: row[2],
         noOfClients: row[3],
+        motorCode: row[4],
       }));
 
       return res.status(200).json({ result: formattedData });
