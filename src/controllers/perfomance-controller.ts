@@ -209,7 +209,8 @@ ORDER BY pr_class_name
     let connection;
     let results;
     try {
-      const year: number | any = req.query.year;
+      const fromDate: string | any = req.query.fromDate;
+      const toDate: string | any = req.query.toDate;
       const branchCode: string | any = req.query.branchCode;
       connection = (await pool).getConnection();
       console.log("connected to database");
@@ -221,14 +222,14 @@ ORDER BY pr_class_name
    WHERE     a.ENT_AENT_CODE = b.cm_int_aent_code
          AND a.ENT_CODE = b.CM_INT_ENT_CODE
          AND ent_os_code = NVL ( :branchCode, ent_os_code)
-         AND EXTRACT (YEAR FROM hd_gl_date) =
-             NVL ( :year, EXTRACT (YEAR FROM hd_gl_date))
+         AND TRUNC (hd_gl_date) BETWEEN :p_fm_dt AND :p_to_dt
 GROUP BY ent_os_code
       `;
 
       // Execute the query with parameters
       results = (await connection).execute(query, {
-        year: year,
+        p_fm_dt: fromDate,
+        p_to_dt: toDate,
         branchCode: branchCode,
       });
 
@@ -256,7 +257,8 @@ GROUP BY ent_os_code
     let connection;
     let results;
     try {
-      const year: number | any = req.query.year;
+      const fromDate: string | any = req.query.fromDate;
+      const toDate: string | any = req.query.toDate;
       const branchCode: string | any = req.query.branchCode;
       connection = (await pool).getConnection();
       console.log("connected to database");
@@ -340,8 +342,7 @@ GROUP BY ent_os_code
                  AND a.cm_org_code = g.ch_org_code
                  AND a.cm_index = g.ch_cm_index
                  AND g.ch_status IN ('Opened', 'Open')
-                 AND EXTRACT (YEAR FROM g.created_on) =
-                     NVL ( :year, EXTRACT (YEAR FROM g.created_on))
+                 AND TRUNC (g.created_on) BETWEEN :p_fm_dt AND :p_to_dt
                  AND cm_os_code = NVL ( :branchCode, cm_os_code)
                  AND NVL (f.pr_rec_counter, 0) <= 0
                  AND a.cm_register = 'Y')
@@ -350,7 +351,8 @@ GROUP BY cm_os_code
 
       // Execute the query with parameters
       results = (await connection).execute(query, {
-        year: year,
+        p_fm_dt: fromDate,
+        p_to_dt: toDate,
         branchCode: branchCode,
       });
 
@@ -378,75 +380,74 @@ GROUP BY cm_os_code
     let connection;
     let results;
     try {
-      const year: number | any = req.query.year;
+      const fromDate: string | any = req.query.fromDate;
+      const toDate: string | any = req.query.toDate;
       const branchCode: string | any = req.query.branchCode;
       connection = (await pool).getConnection();
       console.log("connected to database");
 
       // Construct SQL query with conditional parameter inclusion
       let query = `
-            SELECT DISTINCT
-         nvl(f.PR_OS_CODE,'100')PR_OS_CODE,  COUNT (a.cm_no) cnt, SUM (NVL (cm_lc_value, 0)) amnt
-    FROM cm_claims          a,
-         cm_claims_risks    b,
-         uw_premium_register f,
-         (  SELECT eh_org_code,
-                   eh_cm_index,
-                   NVL (SUM (NVL (cm_closing_value, 0)), 0)     cm_lc_value
-              FROM (  SELECT DISTINCT
-                             d.eh_org_code,
-                             d.eh_cm_index,
-                             d.eh_ce_index,
-                             d.eh_status,
-                             NVL (d.eh_new_lc_amount, 0)     cm_closing_value
-                        FROM cm_estimates_history d
-                       WHERE     d.created_on =
-                                 (SELECT DISTINCT MAX (g.created_on)
-                                    FROM cm_estimates_history g
-                                   WHERE     TRUNC (g.created_on) <=
-                                             ('${year}')
-                                         AND g.eh_org_code = d.eh_org_code
-                                         AND g.eh_cm_index = d.eh_cm_index
-                                         AND g.eh_ce_index = d.eh_ce_index)
-                             AND TRUNC (d.created_on) <= ('${year}')
-                             AND d.eh_status NOT IN ('Closed', 'Fully Paid')
-                    ORDER BY d.eh_cm_index, d.eh_ce_index)
-          GROUP BY eh_org_code, eh_cm_index) e,
-         (SELECT DISTINCT a.ch_org_code,
-                          a.ch_cm_index,
-                          a.created_on,
-                          a.ch_status
-            FROM cm_claims_history a
-           WHERE a.created_on =
-                 (SELECT DISTINCT MAX (b.created_on)
-                    FROM cm_claims_history b
-                   WHERE     TRUNC (b.created_on) <= ('${year}')
-                         AND b.ch_org_code = a.ch_org_code
-                         AND b.ch_cm_index = a.ch_cm_index)) g
-   WHERE   a.cm_org_code = b.cr_org_code
-         AND a.cm_index = b.cr_cm_index
-         AND a.cm_org_code = f.pr_org_code(+)
-         AND a.cm_pl_index = f.pr_pl_index(+)
-         AND a.cm_end_index = f.pr_end_index(+)
-         AND f.PR_OS_CODE = NVL ( :branchCode, f.pr_os_code)
-         AND b.cr_mc_code = f.pr_mc_code(+)
-         AND b.cr_sc_code = f.pr_sc_code(+)
-         AND a.cm_org_code = g.ch_org_code
-         AND a.cm_index = g.ch_cm_index
-         AND b.cr_org_code = e.eh_org_code(+)
-         AND b.cr_cm_index = e.eh_cm_index(+)
-         AND g.ch_status NOT IN ('Closed', 'Closed - No Claim')
-         AND a.cm_register = 'Y'
+           SELECT DISTINCT
+         f.PR_OS_CODE,
+         COUNT (a.cm_no) cnt,
+         SUM (NVL (cm_lc_value, 0)) amnt
+  FROM cm_claims a,
+       cm_claims_risks b,
+       uw_premium_register f,
+       (  SELECT eh_org_code,
+                 eh_cm_index,
+                 NVL (SUM (NVL (cm_closing_value, 0)), 0) cm_lc_value
+            FROM (  SELECT DISTINCT d.eh_org_code,
+                                    d.eh_cm_index,
+                                    d.eh_ce_index,
+                                    d.eh_status,
+                                    NVL (d.eh_new_lc_amount, 0) cm_closing_value
+                      FROM cm_estimates_history d
+                     WHERE d.created_on =
+                              (SELECT DISTINCT MAX (g.created_on)
+                                 FROM cm_estimates_history g
+                                WHERE TRUNC (g.created_on) <= TRUNC (to_date(:p_asatdate))
+                                      AND g.eh_org_code = d.eh_org_code
+                                      AND g.eh_cm_index = d.eh_cm_index
+                                      AND g.eh_ce_index = d.eh_ce_index)
+                           AND TRUNC (d.created_on) <= TRUNC (to_date(:p_asatdate))
+                           AND d.eh_status NOT IN ('Closed', 'Fully Paid')
+                  ORDER BY d.eh_cm_index, d.eh_ce_index)
+        GROUP BY eh_org_code, eh_cm_index) e
+        ,
+     (SELECT DISTINCT a.ch_org_code, a.ch_cm_index, a.created_on,a.ch_status
+          FROM cm_claims_history a
+         WHERE a.created_on =
+                  (SELECT DISTINCT MAX (b.created_on)
+                     FROM cm_claims_history b
+                    WHERE     TRUNC (b.created_on) <= TRUNC (to_date(:p_asatdate))
+                          AND b.ch_org_code = a.ch_org_code
+                          AND b.ch_cm_index = a.ch_cm_index)) g
+ WHERE     a.cm_org_code = :p_org_code
+       AND a.cm_org_code = b.cr_org_code
+       AND a.cm_index = b.cr_cm_index
+       AND a.cm_org_code = f.pr_org_code(+)
+       AND a.cm_pl_index = f.pr_pl_index(+)
+       AND a.cm_end_index = f.pr_end_index(+)
+           and b.cr_mc_code = f.pr_mc_code(+)
+           and b.cr_sc_code = f.pr_sc_code(+)
+       AND a.cm_org_code = g.ch_org_code
+       AND a.cm_index = g.ch_cm_index
+       AND b.cr_org_code = e.eh_org_code(+)
+       AND b.cr_cm_index = e.eh_cm_index(+)
+       AND g.ch_status NOT IN ('Closed','Closed - No Claim')
+       AND a.cm_register = 'Y'
 GROUP BY f.PR_OS_CODE
+ORDER BY  f.PR_OS_CODE
 
       `;
 
       // Execute the query with parameters
       results = (await connection).execute(query, {
+        p_asatdate: toDate,
         branchCode: branchCode,
       });
-      console.log((await results).rows);
-      console.log(year);
 
       const formattedData = (await results).rows?.map((row: any) => ({
         org_code: row[0],
@@ -473,7 +474,8 @@ GROUP BY f.PR_OS_CODE
     let connection;
     let results;
     try {
-      const year: number | any = req.query.year;
+      const fromDate: string | any = req.query.fromDate;
+      const toDate: string | any = req.query.toDate;
       const branchCode: string | any = req.query.branchCode;
       connection = (await pool).getConnection();
       console.log("connected to database");
@@ -481,7 +483,7 @@ GROUP BY f.PR_OS_CODE
       // Construct SQL query with conditional parameter inclusion
       let query = `
             
-  SELECT os_name,
+   SELECT os_name,
          pl_os_code,
          SUM (motor)               motor_count,
          SUM (non_motor)           non_motor_count,
@@ -557,8 +559,10 @@ GROUP BY f.PR_OS_CODE
                                        OVER (PARTITION BY pl_index
                                              ORDER BY pl_end_index DESC)    rnk
                               FROM uh_policy aa
-                             WHERE     EXTRACT (YEAR FROM pl_to_dt + 1) = :p_year
-                                   AND EXTRACT (YEAR FROM pl_fm_dt) = :p_year)
+                             WHERE     TRUNC (pl_to_dt + 1) BETWEEN :p_fm_dt
+                                                                AND :p_to_dt
+                                   AND TRUNC (pl_fm_dt) BETWEEN :p_fm_dt
+                                                            AND :p_to_dt)
                      WHERE rnk = 1) a,
                    uh_policy_class b,
                    (  SELECT sv_org_code,
@@ -603,13 +607,14 @@ GROUP BY f.PR_OS_CODE
                                AND pe_pl_index = pl_index
                                AND pe_int_end_code IN ('110', '103')
                                AND pe_status = 'Approved'
-                               AND EXTRACT (YEAR FROM pe_fm_date) = :p_year) =
+                               AND TRUNC (pe_fm_date) BETWEEN :p_fm_dt
+                                                          AND :p_to_dt) =
                        0
                    AND (SELECT pl_oneoff
                           FROM uw_policy
                          WHERE pl_index = a.pl_index) = 'N'
                    AND pl_type = 'Normal'
-                   AND EXTRACT (YEAR FROM (pl_to_dt + 1)) = :p_year
+                   AND TRUNC (pl_to_dt + 1) BETWEEN :p_fm_dt AND :p_to_dt
                    AND pl_os_code = NVL ( :branchCode, pl_os_code)
           ORDER BY pl_no)
 GROUP BY os_name, pl_os_code
@@ -618,11 +623,10 @@ GROUP BY os_name, pl_os_code
 
       // Execute the query with parameters
       results = (await connection).execute(query, {
-        p_year: year,
+        p_fm_dt: fromDate,
+        p_to_dt: toDate,
         branchCode: branchCode,
       });
-      console.log((await results).rows);
-      console.log(year);
 
       const formattedData = (await results).rows?.map((row: any) => ({
         branchName: row[0],
@@ -652,7 +656,8 @@ GROUP BY os_name, pl_os_code
     let connection;
     let results;
     try {
-      const year: number | any = req.query.year;
+      const fromDate: string | any = req.query.fromDate;
+      const toDate: string | any = req.query.toDate;
       const branchCode: string | any = req.query.branchCode;
       connection = (await pool).getConnection();
       console.log("connected to database");
@@ -767,18 +772,16 @@ UNION
          AND a.pl_type NOT IN ('Quote', 'RenewalNotice')
          AND NVL (k.os_code, '100') =
              NVL ( :branchCode, NVL (k.os_code, '100'))
-         AND EXTRACT (YEAR FROM pl_to_dt + 1) =
-             NVL ( :year, EXTRACT (YEAR FROM pl_to_dt))
+         AND TRUNC (pl_to_dt + 1) BETWEEN :p_fm_dt AND :p_to_dt
 GROUP BY k.os_ref_os_code, pl_os_code, pc_mc_code
       `;
 
       // Execute the query with parameters
       results = (await connection).execute(query, {
-        year: year,
+        p_fm_dt: fromDate,
+        p_to_dt: toDate,
         branchCode: branchCode,
       });
-      console.log((await results).rows);
-      console.log(year);
 
       const formattedData = (await results).rows?.map((row: any) => ({
         branchCode: row[0],
@@ -836,45 +839,12 @@ GROUP BY k.os_ref_os_code, pl_os_code, pc_mc_code
       }
     }
   }
-  async getYears(req: Request, res: Response) {
-    let connection;
-    let results;
-    try {
-      connection = (await pool).getConnection();
-      console.log("connected to database");
-
-      // Construct SQL query with conditional parameter inclusion
-      let query = `
-       select distinct extract (year from pr_gl_date) as year from uw_premium_register
-      `;
-
-      // Execute the query with parameters
-      results = (await connection).execute(query);
-
-      const formattedData = (await results).rows?.map((row: any) => ({
-        year: row[0],
-      }));
-
-      return res.status(200).json({ result: formattedData });
-    } catch (error) {
-      console.error(error);
-      return res.status(500).json({ error: "Internal server error" });
-    } finally {
-      try {
-        if (connection) {
-          (await connection).close();
-          console.info("Connection closed successfully");
-        }
-      } catch (error) {
-        console.error(error);
-      }
-    }
-  }
   async getEntityClients(req: Request, res: Response) {
     let connection;
     let results;
     try {
-      const year: number | any = req.query.year;
+      const fromDate: string | any = req.query.fromDate;
+      const toDate: string | any = req.query.toDate;
       const branchCode: string | any = req.query.branchCode;
       connection = (await pool).getConnection();
       console.log("connected to database");
@@ -886,15 +856,15 @@ GROUP BY k.os_ref_os_code, pl_os_code, pc_mc_code
          ent_os_code
     FROM all_entity
    WHERE     ent_status = 'ACTIVE'
-         AND EXTRACT (YEAR FROM created_on) =
-             NVL ( :year, EXTRACT (YEAR FROM created_on))
+         AND EXTRACT (YEAR FROM created_on) BETWEEN :p_fm_dt AND :p_to_dt
          AND ent_os_code = NVL ( :branchCode, ent_os_code)
 GROUP BY ent_status, ent_aent_code, ent_os_code
       `;
 
       // Execute the query with parameters
       results = (await connection).execute(query, {
-        year: year,
+        p_fm_dt: fromDate,
+        p_to_dt: toDate,
         branchCode: branchCode,
       });
 
@@ -922,15 +892,15 @@ GROUP BY ent_status, ent_aent_code, ent_os_code
     let connection;
     let results;
     try {
-      const year: number | any = req.query.year;
+      const fromDate: string | any = req.query.fromDate;
+      const toDate: string | any = req.query.toDate;
       const branchCode: string | any = req.query.branchCode;
       connection = (await pool).getConnection();
       console.log("connected to database");
 
       // Construct SQL query with conditional parameter inclusion
       let query = `
-       SELECT a.pr_org_code,
-         NVL (b.os_code, '100')          pr_os_code,
+               NVL (b.os_code, '100')          pr_os_code,
          NVL (os_name, 'Un-Assigned')    pr_os_name,
            NVL (
                SUM (
@@ -1020,8 +990,7 @@ GROUP BY ent_status, ent_aent_code, ent_os_code
    WHERE     a.pr_int_aent_code = b.ent_aent_code
          AND a.pr_int_ent_code = b.ent_code
          AND a.pr_org_code = b.os_org_code
-         AND EXTRACT (YEAR FROM pr_gl_date) =
-             NVL ( :year, EXTRACT (YEAR FROM pr_gl_date))
+         AND TRUNC (pr_gl_date) BETWEEN :p_fm_dt AND :p_to_dt
          AND b.os_code = NVL ( :branchCode, b.os_code)
 GROUP BY a.pr_org_code,
          NVL (b.os_code, '100'),
@@ -1031,7 +1000,8 @@ ORDER BY pr_org_code, pr_os_code
 
       // Execute the query with parameters
       results = (await connection).execute(query, {
-        year: year,
+        p_fm_dt: fromDate,
+        p_to_dt: toDate,
         branchCode: branchCode,
       });
 

@@ -27,9 +27,6 @@ perfomanceRouter.get("/production", (req, res) => {
 perfomanceRouter.get("/branches", (req, res) => {
   perfomanceController.getOrgBranches(req, res);
 });
-perfomanceRouter.get("/years", (req, res) => {
-  perfomanceController.getYears(req, res);
-});
 perfomanceRouter.get("/clients", (req, res) => {
   perfomanceController.getEntityClients(req, res);
 });
