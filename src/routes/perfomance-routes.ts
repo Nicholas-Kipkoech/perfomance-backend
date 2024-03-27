@@ -30,5 +30,14 @@ perfomanceRouter.get("/branches", (req, res) => {
 perfomanceRouter.get("/clients", (req, res) => {
   perfomanceController.getEntityClients(req, res);
 });
+perfomanceRouter.get("/salvages", (req, res) => {
+  perfomanceController.getRISalvages(req, res);
+});
+perfomanceRouter.get("/recovery", (req, res) => {
+  perfomanceController.getRIrecovery(req, res);
+});
+perfomanceRouter.get("/AR-receipts", (req, res) => {
+  perfomanceController.getARreceiptsListing(req, res);
+});
 
 export default perfomanceRouter;

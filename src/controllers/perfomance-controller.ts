@@ -265,100 +265,127 @@ GROUP BY ent_os_code
 
       // Construct SQL query with conditional parameter inclusion
       let query = `
-       SELECT COUNT (*), cm_os_code
-    FROM (SELECT DISTINCT
-                 a.cm_org_code,
-                 a.cm_index,
-                 a.cm_pl_index,
-                 a.cm_end_index,
-                 a.cm_no,
-                 a.cm_pl_no,
-                 a.cm_end_no,
-                 f.pr_lc_si,
-                 (SELECT os_name
-                    FROM hi_org_structure
-                   WHERE os_code = cm_os_code)
-                     branch_name,
-                 (SELECT os_name
-                    FROM hi_org_structure
-                   WHERE os_code =
-                         (SELECT NVL (os_ref_os_code, os_code)
-                            FROM hi_org_structure
-                           WHERE os_code = cm_os_code))
-                     office_name,
-                 a.cm_master_no,
-                 a.cm_end_fm_dt
-                     cm_pl_master_fm_dt,
-                 a.cm_end_to_dt
-                     cm_pl_master_to_dt,
-                 a.cm_end_to_dt,
-                 TRUNC (g.created_on)
-                     created_on,
-                 a.cm_loss_date,
-                 a.cm_int_date,
-                 a.cm_cur_code,
-                 a.cm_os_code,
-                 b.cr_mc_code,
-                 INITCAP (
-                     pkg_system_admin.get_class_name (cr_org_code, cr_mc_code))
-                     class,
-                 INITCAP (
-                     pkg_system_admin.get_sc_cover_name (cr_org_code,
-                                                         cr_mc_code,
-                                                         cr_cc_code))
-                     cover,
-                 b.cr_sc_code,
-                 pkg_system_admin.get_subclass_name (cr_org_code, cr_sc_code)
-                     sub_class,
-                 pkg_system_admin.get_subclass_name (cr_org_code, cr_sc_code)
-                     sub_class_name,
-                 a.cm_int_aent_code,
-                 a.cm_int_ent_code,
-                 INITCAP (
-                     pkg_system_admin.get_entity_name (a.cm_int_aent_code,
-                                                       a.cm_int_ent_code))
-                     agent,
-                 a.cm_aent_code,
-                 a.cm_ent_code,
-                 INITCAP (
-                     pkg_system_admin.get_entity_name (a.cm_aent_code,
-                                                       a.cm_ent_code))
-                     insured,
-                 a.cm_status,
-                 a.cm_desc,
-                 a.cm_loss_cause,
-                 pkg_system_admin.get_system_desc ('CM_LOSS_CAUSE',
-                                                   a.cm_loss_cause)
-                     description_of_loss
-            FROM cm_claims          a,
-                 cm_claims_history  g,
-                 cm_claims_risks    b,
-                 uw_premium_register f
-           WHERE     a.cm_org_code = b.cr_org_code
-                 AND a.cm_index = b.cr_cm_index
-                 AND a.cm_org_code = f.pr_org_code(+)
-                 AND a.cm_pl_index = f.pr_pl_index(+)
-                 AND a.cm_end_index = f.pr_end_index(+)
-                 AND a.cm_org_code = g.ch_org_code
-                 AND a.cm_index = g.ch_cm_index
-                 AND g.ch_status IN ('Opened', 'Open')
-                 AND TRUNC (g.created_on) BETWEEN :p_fm_dt AND :p_to_dt
-                 AND cm_os_code = NVL ( :branchCode, cm_os_code)
-                 AND NVL (f.pr_rec_counter, 0) <= 0
-                 AND a.cm_register = 'Y')
-GROUP BY cm_os_code
+       SELECT ss.*,
+       (SELECT NVL (SUM (eh_new_lc_amount), 0)     v_amount
+          FROM (  SELECT NVL (a.eh_new_lc_amount, 0)     eh_new_lc_amount
+                    FROM cm_estimates_history a
+                   WHERE     a.eh_org_code = ss.cm_org_code
+                         AND a.eh_cm_index = ss.cm_index
+                         AND a.eh_status IN ('New')
+                         AND a.created_on =
+                             (SELECT MIN (created_on)
+                                FROM cm_estimates_history b
+                               WHERE     b.eh_org_code = a.eh_org_code
+                                     AND b.eh_cm_index = a.eh_cm_index
+                                     AND TRUNC (b.created_on) =
+                                         TRUNC (ss.created_on)
+                                     AND b.eh_new_lc_amount > 0)
+                ORDER BY a.created_on DESC))    total_provision
+  FROM (SELECT DISTINCT
+               a.cm_org_code,
+               a.cm_index,
+               a.cm_pl_index,
+               a.cm_end_index,
+               a.cm_no,
+               a.cm_pl_no,
+               a.cm_end_no,
+               f.pr_lc_si,
+               (SELECT os_name
+                  FROM hi_org_structure
+                 WHERE os_code = cm_os_code)
+                   branch_name,
+               (SELECT os_name
+                  FROM hi_org_structure
+                 WHERE os_code =
+                       (SELECT NVL (os_ref_os_code, os_code)
+                          FROM hi_org_structure
+                         WHERE os_code = cm_os_code))
+                   office_name,
+               a.cm_master_no,
+               a.cm_end_fm_dt
+                   cm_pl_master_fm_dt,
+               a.cm_end_to_dt
+                   cm_pl_master_to_dt,
+               a.cm_end_to_dt,
+               TRUNC (g.created_on)
+                   created_on,
+               NVL ((SELECT DISTINCT TRUNC (MIN (n.created_on))
+                       FROM cm_claims_history n
+                      WHERE     n.ch_org_code = g.ch_org_code
+                            AND n.ch_cm_index = g.ch_cm_index
+                            AND n.created_on >= g.created_on
+                            AND n.ch_status IN ('Fully Paid',
+                                                'Partialy Paid',
+                                                'Closed',
+                                                'Closed - No Claim')),
+                    :p_to_dt)
+                   created_on_nxt,
+               a.cm_loss_date,
+               a.cm_int_date,
+               a.cm_cur_code,
+               a.cm_os_code,
+               b.cr_mc_code,
+               INITCAP (
+                   pkg_system_admin.get_class_name (cr_org_code, cr_mc_code))
+                   class,
+               INITCAP (
+                   pkg_system_admin.get_sc_cover_name (cr_org_code,
+                                                       cr_mc_code,
+                                                       cr_cc_code))
+                   cover,
+               b.cr_sc_code,
+               pkg_system_admin.get_subclass_name (cr_org_code, cr_sc_code)
+                   sub_class,
+               pkg_system_admin.get_subclass_name (cr_org_code, cr_sc_code)
+                   sub_class_name,
+               a.cm_int_aent_code,
+               a.cm_int_ent_code,
+               INITCAP (
+                   pkg_system_admin.get_entity_name (a.cm_int_aent_code,
+                                                     a.cm_int_ent_code))
+                   agent,
+               a.cm_aent_code,
+               a.cm_ent_code,
+               INITCAP (
+                   pkg_system_admin.get_entity_name (a.cm_aent_code,
+                                                     a.cm_ent_code))
+                   insured,
+               a.cm_status,
+               a.cm_desc,
+               a.cm_loss_cause,
+               pkg_system_admin.get_system_desc ('CM_LOSS_CAUSE',
+                                                 a.cm_loss_cause)
+                   description_of_loss
+          FROM cm_claims            a,
+               cm_claims_history    g,
+               cm_claims_risks      b,
+               uw_premium_register  f
+         WHERE     a.cm_org_code = :p_org_code
+               AND a.cm_org_code = b.cr_org_code
+               AND a.cm_index = b.cr_cm_index
+               AND a.CM_OS_CODE = NVL ( :branchCode, a.cm_os_code)
+               AND a.cm_org_code = f.pr_org_code(+)
+               AND a.cm_pl_index = f.pr_pl_index(+)
+               AND a.cm_end_index = f.pr_end_index(+)
+               AND a.cm_org_code = g.ch_org_code
+               AND a.cm_index = g.ch_cm_index
+               AND g.ch_status IN ('Opened', 'Open')
+               AND (g.created_on) BETWEEN ( :p_fm_dt) AND ( :p_to_dt)
+               AND NVL (f.pr_rec_counter, 0) <= 0
+               AND a.cm_register = 'Y') ss
       `;
 
       // Execute the query with parameters
       results = (await connection).execute(query, {
+        p_org_code: "50",
         p_fm_dt: fromDate,
         p_to_dt: toDate,
         branchCode: branchCode,
       });
 
       const formattedData = (await results).rows?.map((row: any) => ({
-        totalNumber: row[0],
-        branchCode: row[1],
+        branchCode: row[19],
+        totalProvision: row[36],
       }));
 
       return res.status(200).json({ result: formattedData });
@@ -424,8 +451,8 @@ GROUP BY cm_os_code
                     WHERE     TRUNC (b.created_on) <= TRUNC (to_date(:p_asatdate))
                           AND b.ch_org_code = a.ch_org_code
                           AND b.ch_cm_index = a.ch_cm_index)) g
- WHERE     a.cm_org_code = :p_org_code
-       AND a.cm_org_code = b.cr_org_code
+ WHERE    
+        a.cm_org_code = b.cr_org_code
        AND a.cm_index = b.cr_cm_index
        AND a.cm_org_code = f.pr_org_code(+)
        AND a.cm_pl_index = f.pr_pl_index(+)
@@ -446,7 +473,6 @@ ORDER BY  f.PR_OS_CODE
       // Execute the query with parameters
       results = (await connection).execute(query, {
         p_asatdate: toDate,
-        branchCode: branchCode,
       });
 
       const formattedData = (await results).rows?.map((row: any) => ({
@@ -851,12 +877,12 @@ GROUP BY k.os_ref_os_code, pl_os_code, pc_mc_code
 
       // Construct SQL query with conditional parameter inclusion
       let query = `
-      SELECT COUNT (ent_aent_code)     total_clients,
+       SELECT COUNT (ent_aent_code)     total_clients,
          ent_aent_code             entity_code,
          ent_os_code
     FROM all_entity
    WHERE     ent_status = 'ACTIVE'
-         AND EXTRACT (YEAR FROM created_on) BETWEEN :p_fm_dt AND :p_to_dt
+         AND TRUNC (created_on) BETWEEN :p_fm_dt AND :p_to_dt
          AND ent_os_code = NVL ( :branchCode, ent_os_code)
 GROUP BY ent_status, ent_aent_code, ent_os_code
       `;
@@ -900,7 +926,7 @@ GROUP BY ent_status, ent_aent_code, ent_os_code
 
       // Construct SQL query with conditional parameter inclusion
       let query = `
-               NVL (b.os_code, '100')          pr_os_code,
+              SELECT NVL (b.os_code, '100')          pr_os_code,
          NVL (os_name, 'Un-Assigned')    pr_os_name,
            NVL (
                SUM (
@@ -1007,10 +1033,461 @@ ORDER BY pr_org_code, pr_os_code
 
       const formattedData = (await results).rows?.map((row: any) => ({
         org_code: row[0],
+        branchName: row[1],
+        newBusiness: row[2],
+        renewals: row[3],
+      }));
+
+      return res.status(200).json({ result: formattedData });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: "Internal server error" });
+    } finally {
+      try {
+        if (connection) {
+          (await connection).close();
+          console.info("Connection closed successfully");
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  }
+  async getRISalvages(req: Request, res: Response) {
+    let connection;
+    let results;
+    try {
+      const fromDate: string | any = req.query.fromDate;
+      const toDate: string | any = req.query.toDate;
+      const branchCode: string | any = req.query.branchCode;
+      connection = (await pool).getConnection();
+      console.log("connected to database");
+
+      // Construct SQL query with conditional parameter inclusion
+      let query = `
+       SELECT hd_os_code, NVL (a.lc_amount, 0) hd_rcpt_amt
+    FROM cm_recovery_receipts_vw a
+   WHERE     (hd_gl_date) BETWEEN ( :p_fm_dt) AND ( :p_to_dt)
+         AND hd_os_code = NVL ( :branchCode, hd_os_code)
+ORDER BY hd_os_code
+      `;
+
+      // Execute the query with parameters
+      results = (await connection).execute(query, {
+        p_fm_dt: fromDate,
+        p_to_dt: toDate,
+        branchCode: branchCode,
+      });
+
+      const formattedData = (await results).rows?.map((row: any) => ({
+        branchCode: row[0],
+        receiptAmount: row[1],
+      }));
+
+      return res.status(200).json({ result: formattedData });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: "Internal server error" });
+    } finally {
+      try {
+        if (connection) {
+          (await connection).close();
+          console.info("Connection closed successfully");
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  }
+  async getRIrecovery(req: Request, res: Response) {
+    let connection;
+    let results;
+    try {
+      const fromDate: string | any = req.query.fromDate;
+      const toDate: string | any = req.query.toDate;
+      const branchCode: string | any = req.query.branchCode;
+      connection = (await pool).getConnection();
+      console.log("connected to database");
+
+      // Construct SQL query with conditional parameter inclusion
+      let query = `
+      SELECT bh_org_code,
+         hd_os_code,
+         bh_mc_code,
+         UPPER (pkg_system_admin.get_class_name (bh_org_code, bh_mc_code))
+             class,
+         SUM (NVL (j.lc_amount, 0))
+             paid_amount,
+         SUM (
+               NVL (
+                   ROUND (
+                       (  NVL (j.lc_amount, 0)
+                        * DECODE (retention_perc_null,
+                                  NULL, r.retention_perc,
+                                  h.retention_perc)
+                        / 100)),
+                   0)
+             - pkg_cm.get_cm_paid_ri_amount ( :p_org_code,
+                                             cm_index,
+                                             hd_no,
+                                             NULL,
+                                             NULL,
+                                             'XOL',
+                                             'XOL',
+                                             :p_fm_dt,
+                                             :p_to_dt,
+                                             'LC',
+                                             2))
+             retention_amnt,
+         SUM (CASE
+                  WHEN (pr_end_code NOT IN ('20003', '20004'))
+                  THEN
+                        NVL (pkg_cm.get_cm_paid_ri_amount ( :p_org_code,
+                                                           cm_index,
+                                                           hd_no,
+                                                           cr_ri_batch_no,
+                                                           cr_ri_cr_index,
+                                                           'CQS',
+                                                           'CQS',
+                                                           :p_fm_dt,
+                                                           :p_to_dt,
+                                                           'LC',
+                                                           2),
+                             0)
+                      + NVL (pkg_cm.get_cm_paid_ri_amount ( :p_org_code,
+                                                           cm_index,
+                                                           hd_no,
+                                                           cr_ri_batch_no,
+                                                           cr_ri_cr_index,
+                                                           'SURPLUS',
+                                                           'Surplus 1',
+                                                           :p_fm_dt,
+                                                           :p_to_dt,
+                                                           'LC',
+                                                           2),
+                             0)
+                      + NVL (pkg_cm.get_cm_paid_ri_amount ( :p_org_code,
+                                                           cm_index,
+                                                           hd_no,
+                                                           cr_ri_batch_no,
+                                                           cr_ri_cr_index,
+                                                           'SURPLUS',
+                                                           'Surplus 2',
+                                                           :p_fm_dt,
+                                                           :p_to_dt,
+                                                           'LC',
+                                                           2),
+                             0)
+                      + NVL (pkg_cm.get_cm_paid_ri_amount ( :p_org_code,
+                                                           cm_index,
+                                                           hd_no,
+                                                           cr_ri_batch_no,
+                                                           cr_ri_cr_index,
+                                                           'QS',
+                                                           'QS',
+                                                           :p_fm_dt,
+                                                           :p_to_dt,
+                                                           'LC',
+                                                           2),
+                             0)
+                  ELSE
+                      0
+              END)
+             treaty_amt,
+         SUM (CASE
+                  WHEN (pr_end_code IN ('20003', '20004'))
+                  THEN
+                        NVL (pkg_cm.get_cm_paid_ri_amount ( :p_org_code,
+                                                           cm_index,
+                                                           hd_no,
+                                                           cr_ri_batch_no,
+                                                           cr_ri_cr_index,
+                                                           'CQS',
+                                                           'CQS',
+                                                           :p_fm_dt,
+                                                           :p_to_dt,
+                                                           'LC',
+                                                           2),
+                             0)
+                      + NVL (pkg_cm.get_cm_paid_ri_amount ( :p_org_code,
+                                                           cm_index,
+                                                           hd_no,
+                                                           cr_ri_batch_no,
+                                                           cr_ri_cr_index,
+                                                           'SURPLUS',
+                                                           'Surplus 1',
+                                                           :p_fm_dt,
+                                                           :p_to_dt,
+                                                           'LC',
+                                                           2),
+                             0)
+                      + NVL (pkg_cm.get_cm_paid_ri_amount ( :p_org_code,
+                                                           cm_index,
+                                                           hd_no,
+                                                           cr_ri_batch_no,
+                                                           cr_ri_cr_index,
+                                                           'SURPLUS',
+                                                           'Surplus 2',
+                                                           :p_fm_dt,
+                                                           :p_to_dt,
+                                                           'LC',
+                                                           2),
+                             0)
+                      + NVL (pkg_cm.get_cm_paid_ri_amount ( :p_org_code,
+                                                           cm_index,
+                                                           hd_no,
+                                                           cr_ri_batch_no,
+                                                           cr_ri_cr_index,
+                                                           'QS',
+                                                           'QS',
+                                                           :p_fm_dt,
+                                                           :p_to_dt,
+                                                           'LC',
+                                                           2),
+                             0)
+                  ELSE
+                      0
+              END)
+             commesa_amt,
+         SUM (NVL (pkg_cm.get_cm_paid_ri_amount ( :p_org_code,
+                                                 cm_index,
+                                                 hd_no,
+                                                 cr_ri_batch_no,
+                                                 cr_ri_cr_index,
+                                                 'FAC OUT',
+                                                 'FAC Out',
+                                                 :p_fm_dt,
+                                                 :p_to_dt,
+                                                 'LC',
+                                                 2),
+                   0))
+             fac_amt,
+         SUM (NVL (pkg_cm.get_cm_paid_ri_amount ( :p_org_code,
+                                                 cm_index,
+                                                 hd_no,
+                                                 NULL,
+                                                 NULL,
+                                                 'XOL',
+                                                 'XOL',
+                                                 :p_fm_dt,
+                                                 :p_to_dt,
+                                                 'LC',
+                                                 2),
+                   0))
+             xol_amnt
+    FROM cm_payments_vw     j,
+         uh_policy          x,
+         ri_batch_header    bh,
+         vw_premium_register prem,
+         (  SELECT DISTINCT
+                   rs_org_code,
+                   rs_ri_batch_no,
+                   rs_ri_cr_index,
+                   rs_trt_code,
+                   NVL (SUM (DECODE (rs_line_type_int, 'Retention', rs_percent)),
+                        0)
+                       retention_perc,
+                   SUM (DECODE (rs_line_type_int, 'Retention', rs_percent))
+                       retention_perc_null,
+                   NVL (SUM (DECODE (rs_line_type_int, 'Surplus 1', rs_percent)),
+                        0)
+                       surp1_perc,
+                   NVL (SUM (DECODE (rs_line_type_int, 'Surplus 2', rs_percent)),
+                        0)
+                       surp2_perc,
+                   NVL (SUM (DECODE (rs_line_type_int, 'QS', rs_percent)), 0)
+                       qs_perc,
+                   NVL (SUM (DECODE (rs_line_type_int, 'CQS', rs_percent)), 0)
+                       cqs_perc,
+                   NVL (SUM (DECODE (rs_line_type_int, 'FAC Out', rs_percent)),
+                        0)
+                       facout_perc,
+                   0
+                       xol_perc,
+                   NVL (SUM (DECODE (NULL, rs_lc_si, rs_fc_si)), 0)
+                       si,
+                   NVL (SUM (DECODE (rs_line_type_int, 'Retention', rs_lc_si)),
+                        0)
+                       retention_si,
+                   NVL (SUM (DECODE (rs_line_type_int, 'Surplus 1', rs_lc_si)),
+                        0)
+                       surp1_si,
+                   NVL (SUM (DECODE (rs_line_type_int, 'Surplus 2', rs_lc_si)),
+                        0)
+                       surp2_si,
+                   NVL (SUM (DECODE (rs_line_type_int, 'QS', rs_lc_si)), 0)
+                       qs_si,
+                   NVL (SUM (DECODE (rs_line_type_int, 'CQS', rs_lc_si)), 0)
+                       cqs_si,
+                   NVL (SUM (DECODE (rs_line_type_int, 'FAC Out', rs_lc_si)), 0)
+                       facout_si,
+                   0
+                       xol_si
+              FROM uw_policy_ri_shares
+             WHERE rs_type = 'Final' AND rs_line_type_int NOT IN ('Balance')
+          GROUP BY rs_org_code,
+                   rs_ri_batch_no,
+                   rs_ri_cr_index,
+                   rs_trt_code) h,
+         (  SELECT DISTINCT
+                   rh.cm_org_code,
+                   rh.cm_cm_index,
+                   rh.cm_risk_index,
+                   NVL (SUM (DECODE (cm_line_type, 'RETENTION', cm_perc)), 0)    retention_perc
+              FROM cm_claims_ri_header rh, cm_claims_ri_alloc ra
+             WHERE     rh.cm_cm_index = ra.cm_cm_index
+                   AND rh.cm_risk_index = ra.cm_risk_index
+                   AND rh.cm_org_code = ra.cm_org_code
+                   AND cm_line_type = 'RETENTION'
+          GROUP BY rh.cm_org_code, rh.cm_cm_index, rh.cm_risk_index) r
+   WHERE     hd_org_code = :p_org_code
+         AND hd_os_code = NVL ( :branchCode, hd_os_code)
+         AND j.hd_org_code = x.pl_org_code
+         AND j.cm_pl_index = x.pl_index
+         AND j.cm_end_index = x.pl_end_index
+         AND x.pl_index = prem.pr_pl_index
+         AND x.pl_end_index = prem.pr_end_index
+         AND j.cr_ri_batch_no = bh.bh_batch_no(+)
+         AND j.hd_org_code = h.rs_org_code(+)
+         AND j.cr_ri_batch_no = h.rs_ri_batch_no(+)
+         AND j.cr_ri_cr_index = h.rs_ri_cr_index(+)
+         AND j.hd_org_code = r.cm_org_code(+)
+         AND j.cm_index = r.cm_cm_index(+)
+         AND j.cr_risk_index = r.cm_risk_index(+)
+         AND (hd_gl_date) BETWEEN ( :p_fm_dt) AND ( :p_to_dt)
+GROUP BY bh_org_code, bh_mc_code, hd_os_code
+      `;
+
+      // Execute the query with parameters
+      results = (await connection).execute(query, {
+        p_org_code: "50",
+        p_fm_dt: fromDate,
+        p_to_dt: toDate,
+        branchCode: branchCode,
+      });
+
+      const formattedData = (await results).rows?.map((row: any) => ({
+        org_code: row[0],
         branchCode: row[1],
-        branchName: row[2],
-        newBusiness: row[3],
-        renewals: row[4],
+        mc_code: row[2],
+        class: row[3],
+        paidAmount: row[4],
+        retentionAmount: row[5],
+        treatyAmount: row[6],
+        comesaAmount: row[7],
+        facAmount: row[8],
+        xolAmount: row[9],
+      }));
+
+      return res.status(200).json({ result: formattedData });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: "Internal server error" });
+    } finally {
+      try {
+        if (connection) {
+          (await connection).close();
+          console.info("Connection closed successfully");
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  }
+  async getARreceiptsListing(req: Request, res: Response) {
+    let connection;
+    let results;
+    try {
+      const fromDate: string | any = req.query.fromDate;
+      const toDate: string | any = req.query.toDate;
+      const branchCode: string | any = req.query.branchCode;
+      connection = (await pool).getConnection();
+      console.log("connected to database");
+
+      // Construct SQL query with conditional parameter inclusion
+      let query = `
+       SELECT hd_org_code,
+         hd_index,
+         hd_os_code,
+         UPPER (pkg_sa.org_structure_name (hd_org_code, hd_os_code))
+             branch,
+         hd_no,
+         TO_CHAR (hd_gl_date, 'dd/mm/rrrr')
+             gl_date,
+         hd_receipt_mgl_code,
+         pkg_cust.get_mgl_bank_code (hd_org_code, hd_receipt_mgl_code)
+             hd_bank_code,
+         ln_mgl_code
+             ln_mgl_code,
+         ln_aent_code,
+         ln_ent_code,
+         hd_cur_code,
+         hd_cur_code,
+         hd_paying_for,
+         NVL (hd_fc_amount, 0)
+             reciept_amt,
+         DECODE (hd_mode, 'CHEQUE', hd_mode || ' NO ' || hd_chq_no, hd_mode)
+             hd_mode,
+         hd_chq_no,
+         hd_chq_bank,
+         UPPER (
+             NVL (pkg_system_admin.get_ent_catg_name (ln_aent_code), 'none'))
+             category,
+         UPPER (hd_remitter_from)
+             paid_by,
+         ln_ent_code
+             on_account_code,
+         UPPER (pkg_system_admin.get_entity_name (ln_aent_code, ln_ent_code))
+             on_account_name,
+         hd_cust_doc_ref_type
+             receipt_type,
+         do_doc_no
+             doc_no,
+         UPPER (NVL (ln_narration, hd_narration))
+             hd_narration,
+         UPPER (pkg_system_admin.get_user_name (ar_receipts_header.created_by))
+             cashier,
+         hd_status
+    FROM ar_receipts_header,
+         ar_receipt_lines,
+         (  SELECT DISTINCT
+                   do_org_code,
+                   do_hd_no,
+                   LISTAGG (do_doc_no, CHR (10) ON OVERFLOW TRUNCATE)
+                       WITHIN GROUP (ORDER BY do_doc_no)    do_doc_no
+              FROM (SELECT do_org_code, do_hd_no, do_doc_no FROM ar_receipt_docs)
+          GROUP BY do_org_code, do_hd_no)
+   WHERE     hd_org_code = ln_org_code(+)
+         AND hd_no = ln_hd_no(+)
+         AND hd_org_code = do_org_code(+)
+         AND hd_no = do_hd_no(+)
+         AND hd_complete = 'Y'
+         AND hd_status NOT IN ('Cancelled')
+         AND hd_posted = 'Y'
+         AND hd_status IN ('Completed', 'Cancelled')
+         AND hd_os_code = NVL ( :branchCode, hd_os_code)
+         AND hd_no IN (SELECT DISTINCT trn_doc_no
+                         FROM gl_transactions
+                        WHERE trn_doc_type IN ('AR-RECEIPT'))
+         AND hd_org_code = :p_org_code
+         AND NVL (hd_banked, 'N') = NVL ( :p_banked, NVL (hd_banked, 'N'))
+         AND TRUNC (hd_gl_date) BETWEEN ( :p_fm_dt) AND ( :p_to_dt)
+ORDER BY hd_gl_date
+      `;
+
+      // Execute the query with parameters
+      results = (await connection).execute(query, {
+        p_banked: "N",
+        p_org_code: "50",
+        p_fm_dt: fromDate,
+        p_to_dt: toDate,
+        branchCode: branchCode,
+      });
+
+      const formattedData = (await results).rows?.map((row: any) => ({
+        org_code: row[2],
+        currencyCode: row[11],
+        receiptAmount: row[14],
       }));
 
       return res.status(200).json({ result: formattedData });
