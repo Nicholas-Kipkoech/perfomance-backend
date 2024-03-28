@@ -858,129 +858,265 @@ GROUP BY os_name, pl_os_code
 
       // Construct SQL query with conditional parameter inclusion
       let query = `
-        SELECT NVL (k.os_ref_os_code, '100')    pl_os_code,
-         pc_mc_code,
-         SUM (
-             NVL (
-                 CASE
-                     WHEN pl_net_effect IN ('Credit') THEN -1
-                     WHEN pl_end_internal_code IN ('100', '105', '106') THEN 0
-                     ELSE NVL (sv_fc_prem, 0)
-                 END,
-                 0))                      pl_prem
-    FROM uw_policy      a,
-         uw_policy_class d,
-         (SELECT DISTINCT
-                 NVL (os_code, '100')            os_code,
-                 NVL (os_name, 'Un-Assigned')    os_name,
-                 NVL (DECODE (os_type, 'Branch', os_code, os_ref_os_code),
-                      '100')                     os_ref_os_code,
-                 os_type,
-                 ent_code,
-                 ent_aent_code
-            FROM hi_org_structure, all_entity
-           WHERE ent_os_code = os_code(+)) k,
-         (  SELECT sv_org_code,
-                   sv_pl_index,
-                   sv_end_index,
-                   NVL (SUM (NVL (sv_lc_si, 0)), 0)       sv_lc_si,
-                   NVL (SUM (NVL (sv_fc_si, 0)), 0)       sv_fc_si,
-                   NVL (SUM (NVL (sv_lc_prem, 0)), 0)     sv_lc_prem,
-                   NVL (SUM (NVL (sv_fc_prem, 0)), 0)     sv_fc_prem
-              FROM uw_policy_risk_covers
-          GROUP BY sv_org_code, sv_pl_index, sv_end_index) c
-   WHERE     a.pl_org_code = d.pc_org_code(+)
-         AND a.pl_index = d.pc_pl_index(+)
-         AND a.pl_end_index = d.pc_end_index(+)
-         AND a.pl_org_code = c.sv_org_code(+)
-         AND a.pl_index = c.sv_pl_index(+)
-         AND a.pl_end_index = c.sv_end_index(+)
-         AND a.pl_int_aent_code = k.ent_aent_code
-         AND a.pl_int_ent_code = k.ent_code
-         AND a.created_by NOT IN ('1000000', 'GRP9ALNI24')
-         AND a.pl_status NOT IN ('Active',
-                                 'Cancelled',
-                                 'Lapsed',
-                                 'NotTakeUp',
-                                 'Declined',
-                                 'Open')
-         AND a.pl_end_internal_code IN ('000', '110')
-         AND a.pl_bus_type NOT IN ('-1')
-         AND DECODE (a.pl_type, 'Renewal', pl_ren_pl_index, pl_index)
-                 IS NOT NULL
-         AND a.pl_type NOT IN ('Quote', 'RenewalNotice')
-         AND NVL (k.os_code, '100') =
-             NVL ( :branchCode, NVL (k.os_code, '100'))
---AND NVL (k.os_ref_os_code, '100') = NVL (:p_branch, NVL (k.os_ref_os_code, '100'))
-
-GROUP BY k.os_ref_os_code, pl_os_code, pc_mc_code
+       SELECT a.pl_org_code,
+       a.pl_index,
+       a.pl_end_index,
+       a.pl_pr_code,
+       DECODE (
+           a.pl_type,
+           'Renewal', (SELECT DISTINCT pl_no
+                         FROM uw_policy d
+                        WHERE     d.pl_org_code = a.pl_org_code
+                              AND d.pl_index = a.pl_ren_pl_index),
+           pl_no)
+           pl_no,
+       (SELECT LISTAGG (pn_note, CHR (10)) WITHIN GROUP (ORDER BY pn_note)    "reasons"
+          FROM uw_policy_notes
+         WHERE pn_pl_index = a.pl_index)
+           reasons,
+       NVL (a.pl_end_no, 'NEW')
+           pl_end_no,
+       TRUNC (a.pl_fm_dt)
+           pl_fm_dt,
+       TRUNC (a.pl_to_dt)
+           pl_to_dt,
+       TRUNC (a.pl_issue_date)
+           pl_issue_date,
+       TRUNC (a.created_on)
+           created_on,
+       TRUNC (a.updated_on)
+           updated_on,
+       a.pl_assr_ent_code,
+       pkg_system_admin.get_entity_name (a.pl_assr_aent_code,
+                                         a.pl_assr_ent_code)
+           pl_client,
+       pkg_cust.get_user_name (a.pl_org_code, a.created_by)
+           user_created_initials,
+       pkg_cust.get_user_name (a.pl_org_code, a.updated_by)
+           user_updated_initials,
+       a.pl_int_ent_code,
+       pkg_system_admin.get_entity_name (a.pl_int_aent_code,
+                                         a.pl_int_ent_code)
+           pl_intermediary,
+       NVL (k.os_ref_os_code, '100')
+           pl_os_code,
+       UPPER (
+           NVL (pkg_sa.org_structure_name (a.pl_org_code, k.os_ref_os_code),
+                'Un-Assigned'))
+           pl_os_name,
+       d.pc_mc_code,
+       NVL (pkg_system_admin.get_class_name (a.pl_org_code, d.pc_mc_code),
+            'UNCHECKED')
+           pl_class,
+       d.pc_sc_code,
+       pkg_system_admin.get_subclass_name (a.pl_org_code, d.pc_sc_code)
+           pl_subclass,
+       (DECODE ( :p_currency, NULL, NVL (sv_lc_si, 0), NVL (sv_fc_si, 0)))
+           pl_si,
+       NVL (
+           CASE
+               WHEN pl_net_effect IN ('Credit')
+               THEN
+                   ((  DECODE ( :p_currency,
+                               NULL, NVL (sv_lc_prem, 0),
+                               NVL (sv_fc_prem, 0))
+                     * -1))
+               WHEN pl_end_internal_code IN ('100', '105', '106')
+               THEN
+                   0
+               ELSE
+                   (DECODE ( :p_currency,
+                            NULL, NVL (sv_lc_prem, 0),
+                            NVL (sv_fc_prem, 0)))
+           END,
+           0)
+           pl_prem,
+       DECODE (a.updated_by, NULL, 'UN-PROCESSED', 'PROCESSING')
+           pl_status
+  FROM uw_policy        a,
+       uw_policy_class  d,
+       (SELECT DISTINCT
+               NVL (os_org_code, :p_org_code)    os_org_code,
+               NVL (os_code, '100')              os_code,
+               NVL (os_name, 'Un-Assigned')      os_name,
+               NVL (DECODE (os_type, 'Branch', os_code, os_ref_os_code),
+                    '100')                       os_ref_os_code,
+               os_type,
+               ent_code,
+               ent_aent_code
+          FROM hi_org_structure, all_entity
+         WHERE ent_os_code = os_code(+)) k,
+       (  SELECT sv_org_code,
+                 sv_pl_index,
+                 sv_end_index,
+                 NVL (SUM (NVL (sv_lc_si, 0)), 0)       sv_lc_si,
+                 NVL (SUM (NVL (sv_fc_si, 0)), 0)       sv_fc_si,
+                 NVL (SUM (NVL (sv_lc_prem, 0)), 0)     sv_lc_prem,
+                 NVL (SUM (NVL (sv_fc_prem, 0)), 0)     sv_fc_prem
+            FROM uw_policy_risk_covers
+        GROUP BY sv_org_code, sv_pl_index, sv_end_index) c
+ WHERE     a.pl_org_code = d.pc_org_code(+)
+       AND a.pl_index = d.pc_pl_index(+)
+       AND a.pl_end_index = d.pc_end_index(+)
+       AND a.pl_org_code = c.sv_org_code(+)
+       AND a.pl_index = c.sv_pl_index(+)
+       AND a.pl_end_index = c.sv_end_index(+)
+       AND a.pl_org_code = k.os_org_code
+       AND a.pl_int_aent_code = k.ent_aent_code
+       AND a.pl_int_ent_code = k.ent_code
+       AND a.created_by NOT IN ('1000000', 'GRP9ALNI24')
+       AND a.pl_status NOT IN ('Active',
+                               'Cancelled',
+                               'Lapsed',
+                               'NotTakeUp',
+                               'Declined',
+                               'Open')
+       AND a.pl_end_internal_code IN ('000', '110')
+       AND a.pl_bus_type NOT IN ('-1')
+       AND DECODE (a.pl_type, 'Renewal', pl_ren_pl_index, pl_index)
+               IS NOT NULL
+       AND a.pl_cur_code = NVL ( :p_currency, a.pl_cur_code)
+       AND a.pl_org_code = :p_org_code
+       AND a.pl_type NOT IN ('Quote', 'RenewalNotice')
+       AND NVL (k.os_code, '100') = NVL ( :p_branch, NVL (k.os_code, '100'))
+       --AND NVL (k.os_ref_os_code, '100') = NVL (:p_branch, NVL (k.os_ref_os_code, '100'))
+       AND DECODE ( :p_filter_by, '1', (a.created_on), (a.pl_fm_dt)) BETWEEN :p_fm_dt
+                                                                         AND :p_to_dt
 UNION
-  SELECT NVL (k.os_ref_os_code, '100')    pl_os_code,
-         pc_mc_code,
-         SUM (
-             NVL (
-                 CASE
-                     WHEN pl_net_effect IN ('Credit') THEN -1
-                     WHEN pl_end_internal_code IN ('100', '105', '106') THEN 0
-                     ELSE NVL (sv_fc_prem, 0)
-                 END,
-                 0))                      pl_prem
-    FROM uw_policy      a,
-         uw_policy_class d,
-         uw_endorsements f,
-         (SELECT DISTINCT
-                 NVL (os_code, '100')            os_code,
-                 NVL (os_name, 'Un-Assigned')    os_name,
-                 NVL (DECODE (os_type, 'Branch', os_code, os_ref_os_code),
-                      '100')                     os_ref_os_code,
-                 os_type,
-                 ent_code,
-                 ent_aent_code
-            FROM hi_org_structure, all_entity
-           WHERE ent_os_code = os_code(+)) k,
-         (  SELECT sv_org_code,
-                   sv_pl_index,
-                   sv_end_index,
-                   NVL (SUM (NVL (sv_lc_si, 0)), 0)       sv_lc_si,
-                   NVL (SUM (NVL (sv_fc_si, 0)), 0)       sv_fc_si,
-                   NVL (SUM (NVL (sv_lc_prem, 0)), 0)     sv_lc_prem,
-                   NVL (SUM (NVL (sv_fc_prem, 0)), 0)     sv_fc_prem
-              FROM uw_policy_risk_covers
-          GROUP BY sv_org_code, sv_pl_index, sv_end_index) c
-   WHERE     a.pl_org_code = d.pc_org_code(+)
-         AND a.pl_index = d.pc_pl_index(+)
-         AND a.pl_end_index = d.pc_end_index(+)
-         AND a.pl_org_code = c.sv_org_code(+)
-         AND a.pl_index = c.sv_pl_index(+)
-         AND a.pl_end_index = c.sv_end_index(+)
-         AND a.pl_org_code = f.pe_org_code
-         AND a.pl_index = f.pe_pl_index
-         AND a.pl_end_index = f.pe_end_index
-         AND a.pl_int_aent_code = k.ent_aent_code
-         AND a.pl_int_ent_code = k.ent_code
-         AND f.created_by NOT IN ('1000000', 'GRP9ALNI24')
-         AND f.pe_status NOT IN ('Approved', 'NotTakenUp', 'Declined')
-         AND a.pl_bus_type NOT IN ('-1')
-         AND DECODE (a.pl_type, 'Renewal', pl_ren_pl_index, pl_index)
-                 IS NOT NULL
-         AND a.pl_type NOT IN ('Quote', 'RenewalNotice')
-         AND NVL (k.os_code, '100') =
-             NVL ( :branchCode, NVL (k.os_code, '100'))
-         AND TRUNC (pl_to_dt + 1) BETWEEN :p_fm_dt AND :p_to_dt
-GROUP BY k.os_ref_os_code, pl_os_code, pc_mc_code
+SELECT a.pl_org_code,
+       a.pl_index,
+       a.pl_end_index,
+       a.pl_pr_code,
+       a.pl_no,
+       (SELECT LISTAGG (pn_note, CHR (10)) WITHIN GROUP (ORDER BY pn_note)    "reasons"
+          FROM uw_policy_notes
+         WHERE pn_pl_index = a.pl_index)
+           reasons,
+       NVL (a.pl_end_no, 'New')
+           pl_end_no,
+       TRUNC (f.pe_fm_date)
+           pl_fm_dt,
+       TRUNC (f.pe_to_date)
+           pl_to_dt,
+       TRUNC (f.created_on)
+           pl_issue_date,
+       TRUNC (f.created_on)
+           created_on,
+       TRUNC (f.updated_on)
+           updated_on,
+       a.pl_assr_ent_code,
+       pkg_system_admin.get_entity_name (a.pl_assr_aent_code,
+                                         a.pl_assr_ent_code)
+           pl_client,
+       pkg_cust.get_user_name (a.pl_org_code, f.created_by)
+           user_created_initials,
+       pkg_cust.get_user_name (a.pl_org_code, f.updated_by)
+           user_updated_initials,
+       a.pl_int_ent_code,
+       pkg_system_admin.get_entity_name (a.pl_int_aent_code,
+                                         a.pl_int_ent_code)
+           pl_intermediary,
+       NVL (k.os_ref_os_code, '100')
+           pl_os_code,
+       UPPER (
+           NVL (pkg_sa.org_structure_name (a.pl_org_code, k.os_ref_os_code),
+                'Un-Assigned'))
+           pl_os_name,
+       d.pc_mc_code,
+       NVL (pkg_system_admin.get_class_name (a.pl_org_code, d.pc_mc_code),
+            'UNCHECKED')
+           pl_class,
+       d.pc_sc_code,
+       pkg_system_admin.get_subclass_name (a.pl_org_code, d.pc_sc_code)
+           pl_subclass,
+       (DECODE ( :p_currency, NULL, NVL (sv_lc_si, 0), NVL (sv_fc_si, 0)))
+           pl_si,
+       NVL (
+           CASE
+               WHEN pl_net_effect IN ('Credit')
+               THEN
+                   ((  DECODE ( :p_currency,
+                               NULL, NVL (sv_lc_prem, 0),
+                               NVL (sv_fc_prem, 0))
+                     * -1))
+               WHEN pl_end_internal_code IN ('100', '105', '106')
+               THEN
+                   0
+               ELSE
+                   (DECODE ( :p_currency,
+                            NULL, NVL (sv_lc_prem, 0),
+                            NVL (sv_fc_prem, 0)))
+           END,
+           0)
+           pl_prem,
+       DECODE (f.updated_by, NULL, 'UN-PROCESSED', 'PROCESSING')
+           pl_status
+  FROM uw_policy        a,
+       uw_policy_class  d,
+       uw_endorsements  f,
+       (SELECT DISTINCT
+               NVL (os_org_code, :p_org_code)    os_org_code,
+               NVL (os_code, '100')              os_code,
+               NVL (os_name, 'Un-Assigned')      os_name,
+               NVL (DECODE (os_type, 'Branch', os_code, os_ref_os_code),
+                    '100')                       os_ref_os_code,
+               os_type,
+               ent_code,
+               ent_aent_code
+          FROM hi_org_structure, all_entity
+         WHERE ent_os_code = os_code(+)) k,
+       (  SELECT sv_org_code,
+                 sv_pl_index,
+                 sv_end_index,
+                 NVL (SUM (NVL (sv_lc_si, 0)), 0)       sv_lc_si,
+                 NVL (SUM (NVL (sv_fc_si, 0)), 0)       sv_fc_si,
+                 NVL (SUM (NVL (sv_lc_prem, 0)), 0)     sv_lc_prem,
+                 NVL (SUM (NVL (sv_fc_prem, 0)), 0)     sv_fc_prem
+            FROM uw_policy_risk_covers
+        GROUP BY sv_org_code, sv_pl_index, sv_end_index) c
+ WHERE     a.pl_org_code = d.pc_org_code(+)
+       AND a.pl_index = d.pc_pl_index(+)
+       AND a.pl_end_index = d.pc_end_index(+)
+       AND a.pl_org_code = c.sv_org_code(+)
+       AND a.pl_index = c.sv_pl_index(+)
+       AND a.pl_end_index = c.sv_end_index(+)
+       AND a.pl_org_code = f.pe_org_code
+       AND a.pl_index = f.pe_pl_index
+       AND a.pl_end_index = f.pe_end_index
+       AND a.pl_org_code = k.os_org_code
+       AND a.pl_int_aent_code = k.ent_aent_code
+       AND a.pl_int_ent_code = k.ent_code
+       AND f.created_by NOT IN ('1000000', 'GRP9ALNI24')
+       AND f.pe_status NOT IN ('Approved', 'NotTakenUp', 'Declined')
+       AND a.pl_cur_code = NVL ( :p_currency, a.pl_cur_code)
+       AND a.pl_org_code = :p_org_code
+       AND a.pl_bus_type NOT IN ('-1')
+       AND DECODE (a.pl_type, 'Renewal', pl_ren_pl_index, pl_index)
+               IS NOT NULL
+       AND a.pl_type NOT IN ('Quote', 'RenewalNotice')
+       AND NVL (k.os_code, '100') = NVL ( :p_branch, NVL (k.os_code, '100'))
+       --  AND NVL (k.os_ref_os_code, '100') = NVL (:p_branch, NVL (k.os_ref_os_code, '100'))
+
+       AND DECODE ( :p_filter_by, '1', (f.created_on), (f.pe_fm_date)) BETWEEN :p_fm_dt
+                                                                           AND :p_to_dt
+ORDER BY created_on ASC
       `;
 
       // Execute the query with parameters
       results = (await connection).execute(query, {
         p_fm_dt: fromDate,
         p_to_dt: toDate,
-        branchCode: branchCode,
+        p_branch: branchCode,
+        p_currency: "",
+        p_filter_by: "",
+        p_org_code: "50",
       });
+      console.log(await results);
 
       const formattedData = (await results).rows?.map((row: any) => ({
-        branchCode: row[0],
-        premiumCode: row[1],
-        totalPremium: row[2],
+        branchCode: row[18],
+        premiumCode: row[20],
+        totalPremium: row[25],
       }));
 
       return res.status(200).json({ result: formattedData });
