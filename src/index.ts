@@ -12,6 +12,4 @@ app.get("/", (req: Request, res: Response) => {
 
 app.use("/bima/perfomance", perfomanceRouter);
 
-app.listen(port, () =>
-  console.log(`server is running at http://localhost:${port}`)
-);
+app.listen(port, () => console.log(`server is running at port ${port}`));
