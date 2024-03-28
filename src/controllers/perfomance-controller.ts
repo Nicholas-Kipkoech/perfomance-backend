@@ -147,13 +147,17 @@ END;`,
         };
 
         return res.status(200).json({
+          success: true,
           message: "User logged in successfully!",
           accessToken: accessToken,
         });
       } else {
         return res
           .status(400)
-          .json({ error: "Please login with correct credentials" });
+          .json({
+            error: "Please login with correct credentials",
+            success: false,
+          });
       }
 
       //return res.send(result.outBinds.p_result);
