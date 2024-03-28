@@ -152,15 +152,11 @@ END;`,
           accessToken: accessToken,
         });
       } else {
-        return res
-          .status(400)
-          .json({
-            error: "Please login with correct credentials",
-            success: false,
-          });
+        return res.status(400).json({
+          error: "Please login with correct credentials",
+          success: false,
+        });
       }
-
-      //return res.send(result.outBinds.p_result);
     } catch (error) {
       console.error(error);
     } finally {
@@ -1041,8 +1037,6 @@ GROUP BY k.os_ref_os_code, pl_os_code, pc_mc_code
     let connection;
     let results;
     try {
-      const fromDate: string | any = req.query.fromDate;
-      const toDate: string | any = req.query.toDate;
       const branchCode: string | any = req.query.branchCode;
       connection = (await pool).getConnection();
       console.log("connected to database");
@@ -1054,15 +1048,12 @@ GROUP BY k.os_ref_os_code, pl_os_code, pc_mc_code
          ent_os_code
     FROM all_entity
    WHERE     ent_status = 'ACTIVE'
-         AND TRUNC (created_on) BETWEEN :p_fm_dt AND :p_to_dt
          AND ent_os_code = NVL ( :branchCode, ent_os_code)
 GROUP BY ent_status, ent_aent_code, ent_os_code
       `;
 
       // Execute the query with parameters
       results = (await connection).execute(query, {
-        p_fm_dt: fromDate,
-        p_to_dt: toDate,
         branchCode: branchCode,
       });
 
