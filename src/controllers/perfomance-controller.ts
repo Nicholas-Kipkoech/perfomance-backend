@@ -1190,7 +1190,14 @@ ORDER BY created_on ASC
 
       // Construct SQL query with conditional parameter inclusion
       let query = `
-       SELECT COUNT (ent_aent_code)     total_clients,
+      SELECT *
+  FROM (  SELECT COUNT (ent_aent_code)        total_clients,
+                 ent_aent_code                entity_code,
+                 NVL (ent_os_code, '100')     ent_os_code
+            FROM all_entity
+           WHERE ent_status = 'ACTIVE'
+        GROUP BY ent_aent_code, ent_os_code)
+ WHERE ent_os_code = NVL ( :branchCode, ent_os_code) SELECT COUNT (ent_aent_code)     total_clients,
          ent_aent_code             entity_code,
          ent_os_code
     FROM all_entity
