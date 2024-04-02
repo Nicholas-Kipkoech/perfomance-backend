@@ -675,10 +675,8 @@ ORDER BY  f.PR_OS_CODE
       console.log("connected to database");
 
       // Construct SQL query with conditional parameter inclusion
-      let query = `
-            
-   SELECT os_name,
-         pl_os_code,
+      let query = `         
+     SELECT os_name,
          SUM (motor)               motor_count,
          SUM (non_motor)           non_motor_count,
          SUM (pl_fap_motor)        fap_motor,
@@ -753,10 +751,18 @@ ORDER BY  f.PR_OS_CODE
                                        OVER (PARTITION BY pl_index
                                              ORDER BY pl_end_index DESC)    rnk
                               FROM uh_policy aa
-                             WHERE     TRUNC (pl_to_dt + 1) BETWEEN :p_fm_dt
-                                                                AND :p_to_dt
-                                   AND TRUNC (pl_fm_dt) BETWEEN :p_fm_dt
-                                                            AND :p_to_dt)
+                             WHERE     TRUNC (pl_to_dt + 1) BETWEEN TRUNC (
+                                                                        TO_DATE (
+                                                                            :p_fm_dt))
+                                                                AND TRUNC (
+                                                                        TO_DATE (
+                                                                            :p_to_dt))
+                                   AND TRUNC (pl_fm_dt) NOT BETWEEN TRUNC (
+                                                                        TO_DATE (
+                                                                            :p_fm_dt))
+                                                                AND TRUNC (
+                                                                        TO_DATE (
+                                                                            :p_to_dt)))
                      WHERE rnk = 1) a,
                    uh_policy_class b,
                    (  SELECT sv_org_code,
@@ -767,10 +773,10 @@ ORDER BY  f.PR_OS_CODE
                         FROM uh_policy_risk_covers
                     GROUP BY sv_org_code, sv_pl_index, sv_end_index) c,
                    (SELECT DISTINCT
-                           NVL (os_org_code, '50')           os_org_code,
-                           NVL (os_code, '100')              os_code,
-                           NVL (os_name, 'Un-Assigned')      os_name,
-                           NVL (os_ref_os_code, os_code)     os_ref_os_code,
+                           NVL (os_org_code, :p_org_code)     os_org_code,
+                           NVL (os_code, '100')               os_code,
+                           NVL (os_name, 'Un-Assigned')       os_name,
+                           NVL (os_ref_os_code, os_code)      os_ref_os_code,
                            os_type,
                            ent_code,
                            ent_aent_code
@@ -779,7 +785,8 @@ ORDER BY  f.PR_OS_CODE
                    (  SELECT SUM (PM_REN_FC_PREM) PM_REN_FC_PREM, pm_pl_index
                         FROM uw_policy_risk_smi
                     GROUP BY pm_pl_index) r
-             WHERE     pl_org_code = b.pc_org_code
+             WHERE     pl_org_code = :p_org_code
+                   AND pl_org_code = b.pc_org_code
                    AND pl_index = b.pc_pl_index
                    AND pl_status IN ('Active', 'Endorsed', 'Open')
                    AND pl_index NOT IN
@@ -801,34 +808,38 @@ ORDER BY  f.PR_OS_CODE
                                AND pe_pl_index = pl_index
                                AND pe_int_end_code IN ('110', '103')
                                AND pe_status = 'Approved'
-                               AND TRUNC (pe_fm_date) BETWEEN :p_fm_dt
-                                                          AND :p_to_dt) =
+                               AND TRUNC (pe_fm_date) BETWEEN TRUNC (
+                                                                  TO_DATE (
+                                                                      :p_fm_dt))
+                                                          AND TRUNC (
+                                                                  TO_DATE (
+                                                                      :p_to_dt))) =
                        0
                    AND (SELECT pl_oneoff
                           FROM uw_policy
                          WHERE pl_index = a.pl_index) = 'N'
+                   AND pl_os_code = NVL ( :branchCode, a.PL_OS_CODE)
                    AND pl_type = 'Normal'
-                   AND TRUNC (pl_to_dt + 1) BETWEEN :p_fm_dt AND :p_to_dt
-                   AND pl_os_code = NVL ( :branchCode, pl_os_code)
+                   AND TRUNC (pl_to_dt + 1) BETWEEN TRUNC (TO_DATE ( :p_fm_dt))
+                                                AND TRUNC (TO_DATE ( :p_to_dt))
           ORDER BY pl_no)
-GROUP BY os_name, pl_os_code
-
+GROUP BY os_name
       `;
 
       // Execute the query with parameters
       results = (await connection).execute(query, {
         p_fm_dt: fromDate,
         p_to_dt: toDate,
+        p_org_code: "50",
         branchCode: branchCode,
       });
 
       const formattedData = (await results).rows?.map((row: any) => ({
         branchName: row[0],
-        branchCode: row[1],
-        motorCount: row[2],
-        nonMotorCount: row[3],
-        motorAmount: row[4],
-        nonMotorAmount: row[5],
+        motorCount: row[1],
+        nonMotorCount: row[2],
+        motorAmount: row[3],
+        nonMotorAmount: row[4],
       }));
 
       return res.status(200).json({ result: formattedData });
