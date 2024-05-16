@@ -898,6 +898,8 @@ GROUP BY os_name
            created_on,
        TRUNC (a.updated_on)
            updated_on,
+       (TRUNC (TO_DATE ( :p_fm_dt)) - TRUNC (SYSDATE) + 1) || ' Days'
+           pl_ageing,
        a.pl_assr_ent_code,
        pkg_system_admin.get_entity_name (a.pl_assr_aent_code,
                                          a.pl_assr_ent_code)
@@ -992,8 +994,10 @@ GROUP BY os_name
        AND a.pl_type NOT IN ('Quote', 'RenewalNotice')
        AND NVL (k.os_code, '100') = NVL ( :p_branch, NVL (k.os_code, '100'))
        --AND NVL (k.os_ref_os_code, '100') = NVL (:p_branch, NVL (k.os_ref_os_code, '100'))
-       AND DECODE ( :p_filter_by, '1', (a.created_on), (a.pl_fm_dt)) BETWEEN :p_fm_dt
-                                                                         AND :p_to_dt
+       AND DECODE ( :p_filter_by,
+                   '1', TRUNC (a.created_on),
+                   TRUNC (a.pl_fm_dt)) BETWEEN :p_fm_dt
+                                           AND :p_to_dt
 UNION
 SELECT a.pl_org_code,
        a.pl_index,
@@ -1016,6 +1020,8 @@ SELECT a.pl_org_code,
            created_on,
        TRUNC (f.updated_on)
            updated_on,
+       (TRUNC (TO_DATE ( :p_fm_dt)) - TRUNC (SYSDATE) + 1) || ' Days'
+           pl_ageing,
        a.pl_assr_ent_code,
        pkg_system_admin.get_entity_name (a.pl_assr_aent_code,
                                          a.pl_assr_ent_code)
@@ -1106,11 +1112,12 @@ SELECT a.pl_org_code,
        AND DECODE (a.pl_type, 'Renewal', pl_ren_pl_index, pl_index)
                IS NOT NULL
        AND a.pl_type NOT IN ('Quote', 'RenewalNotice')
+      
        AND NVL (k.os_code, '100') = NVL ( :p_branch, NVL (k.os_code, '100'))
-       --  AND NVL (k.os_ref_os_code, '100') = NVL (:p_branch, NVL (k.os_ref_os_code, '100'))
-
-       AND DECODE ( :p_filter_by, '1', (f.created_on), (f.pe_fm_date)) BETWEEN :p_fm_dt
-                                                                           AND :p_to_dt
+       AND DECODE ( :p_filter_by,
+                   '1', TRUNC (f.created_on),
+                   TRUNC (f.pe_fm_date)) BETWEEN :p_fm_dt
+                                             AND :p_to_dt
 ORDER BY created_on ASC
       `;
 
@@ -1126,10 +1133,22 @@ ORDER BY created_on ASC
       console.log(await results);
 
       const formattedData = (await results).rows?.map((row: any) => ({
-        branchCode: row[18],
-        branchName: row[19],
-        premiumCode: row[20],
-        totalPremium: row[25],
+        regBy: row[15],
+        modBy: row[16],
+        policyNo: row[4],
+        endNo: row[6],
+        client: row[14],
+        intermediary: row[18],
+        branchName: row[20],
+        commence: row[7],
+        expiry: row[8],
+        subClass: row[24],
+        sumInsured: row[25],
+        createdOn: row[10],
+        ageing: row[12],
+        status: row[27],
+        premiumCode: row[21],
+        totalPremium: row[26],
       }));
 
       return res.status(200).json({ result: formattedData });
