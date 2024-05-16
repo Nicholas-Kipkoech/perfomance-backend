@@ -325,14 +325,14 @@ END;`,
          pr_int_aent_code,
          COUNT (pr_mc_code)                                  motor_count,
          pr_mc_code                                          motor_code,
-         pr_int_end_code
+         pr_int_end_code,pkg_sa.structure_name('50',pr_os_code) branch_name
     FROM uw_premium_register a, all_entity b
    WHERE     TRUNC (pr_gl_date) BETWEEN :p_fm_dt AND :p_to_dt
          AND a.pr_int_aent_code = b.ENT_AENT_CODE
          AND a.pr_int_ent_code = b.ENT_CODE
          AND pr_os_code = NVL ( :branchCode, pr_os_code)
 --and pr_end_code not in ('20003', '20004')
-GROUP BY pr_mc_code, pr_int_aent_code, pr_int_end_code
+GROUP BY pr_mc_code, pr_int_aent_code, pr_int_end_code,pr_os_code
 ORDER BY pr_class_name
       `;
 
@@ -356,6 +356,7 @@ ORDER BY pr_class_name
         clientsCount: row[9],
         motorCode: row[10],
         renewalCode: row[11],
+        branchName: row[12],
       }));
 
       return res.status(200).json({ result: formattedData });
@@ -1126,6 +1127,7 @@ ORDER BY created_on ASC
 
       const formattedData = (await results).rows?.map((row: any) => ({
         branchCode: row[18],
+        branchName: row[19],
         premiumCode: row[20],
         totalPremium: row[25],
       }));
