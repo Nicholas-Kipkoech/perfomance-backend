@@ -185,155 +185,370 @@ END;`,
 
       // Construct SQL query with conditional parameter inclusion
       let query = `
-                SELECT pr_mc_code,
-         PKG_SYSTEM_ADMIN.GET_CLASS_NAME (50, pr_mc_code)    pr_class_name,
-         NVL (
-             SUM (
-                 CASE
-                     WHEN (pr_int_end_code = '000' AND pr_bus_type != '3000')
-                     THEN
-                         (CASE
-                              WHEN a.pr_net_effect IN ('Credit')
-                              THEN
-                                  (  ((  (  NVL (a.pr_fc_prem, 0)
-                                          + NVL (a.pr_fc_eartquake, 0)
-                                          + NVL (a.pr_fc_political, 0))
-                                       * -1))
-                                   * a.pr_cur_rate)
-                              ELSE
-                                  (  (  NVL (a.pr_fc_prem, 0)
-                                      + NVL (a.pr_fc_eartquake, 0)
-                                      + NVL (a.pr_fc_political, 0))
-                                   * a.pr_cur_rate)
-                          END)
-                     ELSE
-                         0
-                 END),
-             0)                                              pr_nb,
-         NVL (
-             SUM (
-                 CASE
-                     WHEN (pr_int_end_code = '110' AND pr_bus_type != '3000')
-                     THEN
-                         (CASE
-                              WHEN a.pr_net_effect IN ('Credit')
-                              THEN
-                                  (  ((  (  NVL (a.pr_fc_prem, 0)
-                                          + NVL (a.pr_fc_eartquake, 0)
-                                          + NVL (a.pr_fc_political, 0))
-                                       * -1))
-                                   * a.pr_cur_rate)
-                              ELSE
-                                  (  (  NVL (a.pr_fc_prem, 0)
-                                      + NVL (a.pr_fc_eartquake, 0)
-                                      + NVL (a.pr_fc_political, 0))
-                                   * a.pr_cur_rate)
-                          END)
-                     ELSE
-                         0
-                 END),
-             0)                                              pr_ren,
-         NVL (
-             SUM (
-                 CASE
-                     WHEN (    pr_int_end_code IN ('102',
-                                                   '104',
-                                                   '108',
-                                                   '112')
-                           AND pr_bus_type != '3000')
-                     THEN
-                         (CASE
-                              WHEN a.pr_net_effect IN ('Credit')
-                              THEN
-                                  (  ((  (  NVL (a.pr_fc_prem, 0)
-                                          + NVL (a.pr_fc_eartquake, 0)
-                                          + NVL (a.pr_fc_political, 0))
-                                       * -1))
-                                   * a.pr_cur_rate)
-                              ELSE
-                                  (  (  NVL (a.pr_fc_prem, 0)
-                                      + NVL (a.pr_fc_eartquake, 0)
-                                      + NVL (a.pr_fc_political, 0))
-                                   * a.pr_cur_rate)
-                          END)
-                     ELSE
-                         0
-                 END),
-             0)                                              pr_refund,
-         NVL (
-             SUM (
-                 CASE
-                     WHEN (    pr_int_end_code NOT IN ('102',
-                                                       '104',
-                                                       '108',
-                                                       '112',
-                                                       '110',
-                                                       '000')
-                           AND pr_bus_type != '3000')
-                     THEN
-                         (CASE
-                              WHEN a.pr_net_effect IN ('Credit')
-                              THEN
-                                  (  ((  (  NVL (a.pr_fc_prem, 0)
-                                          + NVL (a.pr_fc_eartquake, 0)
-                                          + NVL (a.pr_fc_political, 0))
-                                       * -1))
-                                   * a.pr_cur_rate)
-                              ELSE
-                                  (  (  NVL (a.pr_fc_prem, 0)
-                                      + NVL (a.pr_fc_eartquake, 0)
-                                      + NVL (a.pr_fc_political, 0))
-                                   * a.pr_cur_rate)
-                          END)
-                     ELSE
-                         0
-                 END),
-             0)                                              pr_additional,
-         NVL (
-             SUM (
-                 CASE
-                     WHEN (pr_bus_type = '3000')
-                     THEN
-                         (CASE
-                              WHEN a.pr_net_effect IN ('Credit')
-                              THEN
-                                  (  ((  (  NVL (a.pr_fc_prem, 0)
-                                          + NVL (a.pr_fc_eartquake, 0)
-                                          + NVL (a.pr_fc_political, 0))
-                                       * -1))
-                                   * a.pr_cur_rate)
-                              ELSE
-                                  (  (  NVL (a.pr_fc_prem, 0)
-                                      + NVL (a.pr_fc_eartquake, 0)
-                                      + NVL (a.pr_fc_political, 0))
-                                   * a.pr_cur_rate)
-                          END)
-                     ELSE
-                         0
-                 END),
-             0)                                              pr_facin,
-         NVL (
-             SUM (
-                 CASE
-                     WHEN a.pr_net_effect IN ('Credit')
-                     THEN
-                         (NVL (a.pr_fc_broker_comm, 0) * -1 * a.pr_cur_rate)
-                     ELSE
-                         (NVL (a.pr_fc_broker_comm, 0) * a.pr_cur_rate)
-                 END),
-             0)                                              pr_commission,
+               SELECT pr_org_code,
+         pr_pl_index,
+         pr_end_index,
+         pr_pl_no,
+         pr_end_no,
+         pr_issue_date,
+         pr_gl_date,
+         pr_fm_dt,
+         pr_to_dt,
+         pr_mc_code,
+         UPPER ('class:  ' || pr_mc_code || ' - ' || pr_mc_name)
+             pr_class,
+         pr_sc_code,
+         pr_sc_code
+             pr_sc_code_i,
+         pr_sc_code || ' - ' || pr_sc_name
+             pr_sub_class,
+         pr_pr_code,
+         pr_pr_code || ' - ' || pr_pr_name
+             pr_product,
          pr_int_aent_code,
-         COUNT (pr_mc_code)                                  motor_count,
-         pr_mc_code                                          motor_code,
-         pr_int_end_code,pkg_sa.structure_name('50',pr_os_code) branch_name
+         pr_int_ent_code,
+         pr_int_ent_name
+             pr_intermediary,
+         pr_assr_aent_code,
+         pr_assr_ent_code,
+         pr_assr_ent_name
+             pr_insured,
+         pr_os_code,
+         pr_os_name
+             pl_os_name,
+         pr_int_end_code,
+         CASE
+             WHEN pr_int_end_code IN ('000') THEN 1
+             WHEN pr_int_end_code IN ('110') THEN 4
+             WHEN pr_net_effect IN ('Credit') THEN 3
+             ELSE 2
+         END
+             pr_end_order,
+         CASE
+             WHEN pr_int_end_code IN ('000') THEN 'New Business'
+             WHEN pr_int_end_code IN ('110') THEN 'Renewals'
+             WHEN pr_net_effect IN ('Credit') THEN 'Refunds'
+             ELSE 'Extras'
+         END
+             pr_end_type,
+         pr_cur_code,
+         pr_cur_rate,
+         pr_net_effect,
+         NVL (
+             DECODE ( :p_currency,
+                     NULL, NVL ((NVL (pr_fc_si, 0) * pr_cur_rate), 0),
+                     NVL (pr_fc_si, 0)),
+             0)
+             pr_lc_si,
+         NVL (
+             CASE
+                 WHEN pr_net_effect IN ('Credit')
+                 THEN
+                     NVL (
+                         (  (DECODE (
+                                 :p_currency,
+                                 NULL, NVL (
+                                           (NVL (pr_fc_prem, 0) * pr_cur_rate),
+                                           0),
+                                 NVL (pr_fc_prem, 0)))
+                          * -1),
+                         0)
+                 ELSE
+                     NVL (
+                         DECODE (
+                             :p_currency,
+                             NULL, NVL ((NVL (pr_fc_prem, 0) * pr_cur_rate), 0),
+                             NVL (pr_fc_prem, 0)),
+                         0)
+             END,
+             0)
+             pr_lc_prem,
+         NVL (
+             CASE
+                 WHEN pr_net_effect IN ('Credit')
+                 THEN
+                     NVL (
+                         (  (DECODE (
+                                 :p_currency,
+                                 NULL, NVL (
+                                           (  NVL (pr_fc_eartquake, 0)
+                                            * pr_cur_rate),
+                                           0),
+                                 NVL (pr_fc_eartquake, 0)))
+                          * -1),
+                         0)
+                 ELSE
+                     NVL (
+                         DECODE (
+                             :p_currency,
+                             NULL, NVL (
+                                       (NVL (pr_fc_eartquake, 0) * pr_cur_rate),
+                                       0),
+                             NVL (pr_fc_eartquake, 0)),
+                         0)
+             END,
+             0)
+             pr_lc_eartquake,
+         NVL (
+             CASE
+                 WHEN pr_net_effect IN ('Credit')
+                 THEN
+                     NVL (
+                         (  (DECODE (
+                                 :p_currency,
+                                 NULL, NVL (
+                                           (  NVL (pr_fc_political, 0)
+                                            * pr_cur_rate),
+                                           0),
+                                 NVL (pr_fc_political, 0)))
+                          * -1),
+                         0)
+                 ELSE
+                     NVL (
+                         DECODE (
+                             :p_currency,
+                             NULL, NVL (
+                                       (NVL (pr_fc_political, 0) * pr_cur_rate),
+                                       0),
+                             NVL (pr_fc_political, 0)),
+                         0)
+             END,
+             0)
+             pr_lc_political,
+         NVL (
+             CASE
+                 WHEN pr_net_effect IN ('Credit')
+                 THEN
+                     NVL (
+                         (  (DECODE (
+                                 :p_currency,
+                                 NULL, NVL (
+                                           (  NVL (pr_fc_broker_comm, 0)
+                                            * pr_cur_rate),
+                                           0),
+                                 NVL (pr_fc_broker_comm, 0)))
+                          * -1),
+                         0)
+                 ELSE
+                     NVL (
+                         DECODE (
+                             :p_currency,
+                             NULL, NVL (
+                                       (  NVL (pr_fc_broker_comm, 0)
+                                        * pr_cur_rate),
+                                       0),
+                             NVL (pr_fc_broker_comm, 0)),
+                         0)
+             END,
+             0)
+             pr_lc_broker_comm,
+         NVL (
+             CASE
+                 WHEN pr_net_effect IN ('Credit')
+                 THEN
+                     NVL (
+                         (  (DECODE (
+                                 :p_currency,
+                                 NULL, NVL (
+                                           (  NVL (pr_fc_broker_tax, 0)
+                                            * pr_cur_rate),
+                                           0),
+                                 NVL (pr_fc_broker_tax, 0)))
+                          * -1),
+                         0)
+                 ELSE
+                     NVL (
+                         DECODE (
+                             :p_currency,
+                             NULL, NVL (
+                                       (NVL (pr_fc_broker_tax, 0) * pr_cur_rate),
+                                       0),
+                             NVL (pr_fc_broker_tax, 0)),
+                         0)
+             END,
+             0)
+             pr_lc_broker_tax,
+         NVL (
+             CASE
+                 WHEN pr_net_effect IN ('Credit')
+                 THEN
+                     NVL (
+                         (  (DECODE (
+                                 :p_currency,
+                                 NULL, NVL (
+                                           (  NVL (pr_fc_stamp_duty, 0)
+                                            * pr_cur_rate),
+                                           0),
+                                 NVL (pr_fc_stamp_duty, 0)))
+                          * -1),
+                         0)
+                 ELSE
+                     NVL (
+                         DECODE (
+                             :p_currency,
+                             NULL, NVL (
+                                       (NVL (pr_fc_stamp_duty, 0) * pr_cur_rate),
+                                       0),
+                             NVL (pr_fc_stamp_duty, 0)),
+                         0)
+             END,
+             0)
+             pr_lc_stamp_duty,
+         NVL (
+             CASE
+                 WHEN pr_net_effect IN ('Credit')
+                 THEN
+                     NVL (
+                         (  (DECODE (
+                                 :p_currency,
+                                 NULL, NVL (
+                                           (  NVL (pr_fc_phc_fund, 0)
+                                            * pr_cur_rate),
+                                           0),
+                                 NVL (pr_fc_phc_fund, 0)))
+                          * -1),
+                         0)
+                 ELSE
+                     NVL (
+                         DECODE (
+                             :p_currency,
+                             NULL, NVL (
+                                       (NVL (pr_fc_phc_fund, 0) * pr_cur_rate),
+                                       0),
+                             NVL (pr_fc_phc_fund, 0)),
+                         0)
+             END,
+             0)
+             pr_lc_phc_fund,
+         NVL (
+             CASE
+                 WHEN pr_net_effect IN ('Credit')
+                 THEN
+                     NVL (
+                         (  (DECODE (
+                                 :p_currency,
+                                 NULL, NVL (
+                                           (  NVL (pr_fc_training_levy, 0)
+                                            * pr_cur_rate),
+                                           0),
+                                 NVL (pr_fc_training_levy, 0)))
+                          * -1),
+                         0)
+                 ELSE
+                     NVL (
+                         DECODE (
+                             :p_currency,
+                             NULL, NVL (
+                                       (  NVL (pr_fc_training_levy, 0)
+                                        * pr_cur_rate),
+                                       0),
+                             NVL (pr_fc_training_levy, 0)),
+                         0)
+             END,
+             0)
+             pr_lc_training_levy,
+         NVL (
+             CASE
+                 WHEN pr_net_effect IN ('Credit')
+                 THEN
+                     NVL (
+                         (  (DECODE (
+                                 :p_currency,
+                                 NULL, NVL ((NVL (pr_fc_pta, 0) * pr_cur_rate),
+                                            0),
+                                 NVL (pr_fc_pta, 0)))
+                          * -1),
+                         0)
+                 ELSE
+                     NVL (
+                         DECODE (
+                             :p_currency,
+                             NULL, NVL ((NVL (pr_fc_pta, 0) * pr_cur_rate), 0),
+                             NVL (pr_fc_pta, 0)),
+                         0)
+             END,
+             0)
+             pr_lc_pta,
+         NVL (
+             CASE
+                 WHEN pr_net_effect IN ('Credit')
+                 THEN
+                     NVL (
+                         (  (DECODE (
+                                 :p_currency,
+                                 NULL, NVL ((NVL (pr_fc_aa, 0) * pr_cur_rate),
+                                            0),
+                                 NVL (pr_fc_pta, 0)))
+                          * -1),
+                         0)
+                 ELSE
+                     NVL (
+                         DECODE (
+                             :p_currency,
+                             NULL, NVL ((NVL (pr_fc_aa, 0) * pr_cur_rate), 0),
+                             NVL (pr_fc_pta, 0)),
+                         0)
+             END,
+             0)
+             pr_lc_aa,
+         NVL (
+             CASE
+                 WHEN pr_net_effect IN ('Credit')
+                 THEN
+                     NVL (
+                         (  (DECODE (
+                                 :p_currency,
+                                 NULL, NVL (
+                                           (  NVL (pr_fc_loading, 0)
+                                            * pr_cur_rate),
+                                           0),
+                                 NVL (pr_fc_loading, 0)))
+                          * -1),
+                         0)
+                 ELSE
+                     NVL (
+                         DECODE (
+                             :p_currency,
+                             NULL, NVL ((NVL (pr_fc_loading, 0) * pr_cur_rate),
+                                        0),
+                             NVL (pr_fc_loading, 0)),
+                         0)
+             END,
+             0)
+             pr_lc_loading,
+         NVL (
+             CASE
+                 WHEN pr_net_effect IN ('Credit')
+                 THEN
+                     NVL (
+                         (  (DECODE (
+                                 :p_currency,
+                                 NULL, NVL (
+                                           (  NVL (pr_fc_discount, 0)
+                                            * pr_cur_rate),
+                                           0),
+                                 NVL (pr_fc_discount, 0)))
+                          * -1),
+                         0)
+                 ELSE
+                     NVL (
+                         DECODE (
+                             :p_currency,
+                             NULL, NVL (
+                                       (NVL (pr_fc_discount, 0) * pr_cur_rate),
+                                       0),
+                             NVL (pr_fc_discount, 0)),
+                         0)
+             END,
+             0)
+             pr_lc_discount
     FROM uw_premium_register a, all_entity b
-   WHERE     TRUNC (pr_gl_date) BETWEEN :p_fm_dt AND :p_to_dt
-         AND a.pr_int_aent_code = b.ENT_AENT_CODE
-         AND a.pr_int_ent_code = b.ENT_CODE
-         AND pr_os_code = NVL ( :branchCode, pr_os_code)
---and pr_end_code not in ('20003', '20004')
-GROUP BY pr_mc_code, pr_int_aent_code, pr_int_end_code,pr_os_code
-ORDER BY pr_class_name
+   WHERE     a.pr_int_aent_code = b.ent_aent_code(+)
+         AND a.pr_int_ent_code = b.ent_code(+)
+         AND pr_org_code = :p_org_code
+         AND TRUNC (pr_gl_date) BETWEEN :p_fm_dt AND :p_to_dt
+          AND pr_os_code = NVL ( :branchCode, pr_os_code)
+ORDER BY pr_org_code, pr_pl_index, pr_end_index
       `;
 
       // Execute the query with parameters
@@ -341,22 +556,41 @@ ORDER BY pr_class_name
         p_fm_dt: fromDate,
         p_to_dt: toDate,
         branchCode: branchCode,
+        p_currency: "",
+        p_org_code: "50",
       });
 
       const formattedData = (await results).rows?.map((row: any) => ({
-        classCode: row[0],
-        className: row[1],
-        newPolicies: row[2],
-        renewals: row[3],
-        refund: row[4],
-        additional: row[5],
-        facin: row[6],
-        commision: row[7],
-        clientCode: row[8],
-        clientsCount: row[9],
-        motorCode: row[10],
-        renewalCode: row[11],
-        branchName: row[12],
+        policyNo: row[3],
+        endNo: row[4],
+        insured: row[21],
+        sumInsured: row[30],
+        issueDate: row[5],
+        start: row[7],
+        expiry: row[8],
+        premiums: row[31],
+        earthQuake: row[32],
+        PVTPremium: row[33],
+        stampDuty: row[36],
+        PHCFund: row[37],
+        trainingLevy: row[38],
+        PTACharge: row[39],
+        AACharge: row[40],
+        brokerComm: row[34],
+        witholdingTax: row[35],
+        netPrem:
+          row[31] +
+          row[32] +
+          row[36] +
+          row[37] +
+          row[38] +
+          row[39] +
+          row[40] +
+          row[35] +
+          row[34] +
+          row[33],
+        motorCode: row[9],
+        clientCode: row[16],
       }));
 
       return res.status(200).json({ result: formattedData });
@@ -386,25 +620,143 @@ ORDER BY pr_class_name
 
       // Construct SQL query with conditional parameter inclusion
       let query = `
-       SELECT COUNT (cm_index) total_number, SUM (lc_amount) amount_paid
-    FROM all_entity a, cm_payments_vw b
-   WHERE     a.ENT_AENT_CODE = b.cm_int_aent_code
-         AND a.ENT_CODE = b.CM_INT_ENT_CODE
-         AND ent_os_code = NVL ( :branchCode, ent_os_code)
-         AND TRUNC (hd_gl_date) BETWEEN :p_fm_dt AND :p_to_dt
-GROUP BY ent_os_code
+        SELECT DISTINCT
+         a.hd_org_code,
+         a.hd_no,
+         a.cm_no,
+         a.cm_int_date,
+         a.cm_loss_date,
+         PR_FM_DT
+             start_date,
+         PR_TO_DT
+             end_date,
+         a.cm_pl_no,
+         a.cm_end_no,
+         -- (select os_name from hi_org_structure where os_code = hd_os_code )branch_name,
+         (SELECT os_name
+            FROM hi_org_structure
+           WHERE os_code = (SELECT NVL (os_ref_os_code, os_code)
+                              FROM hi_org_structure
+                             WHERE os_code = hd_os_code))
+             branch_name,
+         (SELECT os_name
+            FROM hi_org_structure
+           WHERE os_code =
+                 (SELECT ent_os_code
+                    FROM all_entity
+                   WHERE     ent_code = cm_int_ent_code
+                         AND ent_aent_code = cm_int_aent_code))
+             office_name,
+         a.cm_pr_code,
+            a.cm_pr_code
+         || '  '
+         || pkg_uw.get_product_name (hd_org_code, cm_pr_code)
+             product_name,
+         pkg_uw.get_product_name (hd_org_code, cm_pr_code)
+             product_name_1,
+         a.cm_int_aent_code,
+         a.cm_int_ent_code,
+         a.cm_aent_code,
+         a.cm_ent_code,
+         a.hd_aent_code,
+         a.hd_ent_code,
+         a.cm_insured,
+         a.hd_payment_mode,
+         a.hd_mode,
+         a.hd_type,
+         a.hd_payee_name,
+         a.cm_loss_cause
+             cm_loss_desc,
+         a.hd_narration,
+         a.hd_gl_date,
+         d.cr_lc_si
+             pr_lc_si,
+         a.ageing_date,
+         NVL (DECODE ( :p_currency, NULL, a.lc_amount, a.fc_amount), 0)
+             hd_payable_lc_amt,
+         a.cr_mc_code,
+         a.cr_sc_code,
+         a.cm_class,
+         INITCAP (pkg_system_admin.get_class_name (pr_org_code, a.cr_mc_code))
+             class,
+         a.cm_sub_class,
+         a.cm_sub_class
+             sub_class,
+         pkg_system_admin.get_entity_name (cm_int_aent_code, cm_int_ent_code)
+             inter,
+         NVL (b.os_code, '100')
+             pr_os_code,
+         HD_ESTIMATE_CODE
+             code_type,
+         (SELECT rs_name
+            FROM cm_reserve_setup
+           WHERE rs_code =
+                 NVL ((SELECT ce_code
+                         FROM cm_estimates
+                        WHERE ce_index = (SELECT CE_REF_CE_INDEX
+                                            FROM cm_estimates
+                                           WHERE ce_index = hd_ce_index)),
+                      HD_ESTIMATE_CODE))
+             reserve_type
+    --(select rs_name from cm_reserve_setup where rs_code= HD_ESTIMATE_CODE ) reserve_type
+    FROM cm_payments_vw     a,
+         vw_premium_register c,
+         (SELECT DISTINCT
+                 NVL (os_org_code, :p_org_code)    os_org_code,
+                 NVL (os_code, '100')              os_code,
+                 NVL (os_name, 'Un-Assigned')      os_name,
+                 NVL (DECODE (os_type, 'Branch', os_code, os_ref_os_code),
+                      '100')                       os_ref_os_code,
+                 os_type,
+                 ent_code,
+                 ent_aent_code
+            FROM hi_org_structure, all_entity
+           WHERE ent_os_code = os_code(+)) b,
+         cm_claims_risks    d
+   WHERE     a.cm_int_aent_code = b.ent_aent_code
+         AND a.cm_int_ent_code = b.ent_code
+         AND a.hd_org_code = b.os_org_code
+         AND hd_org_code = :p_org_code
+         and os_code = nvl(:branchCode,os_code)
+         AND a.cm_pl_index = c.pr_pl_index
+         AND a.cm_index = d.cr_cm_index
+         AND a.cm_end_index = c.pr_end_index
+         AND a.hd_cur_code = NVL ( :p_currency, a.hd_cur_code)
+         AND TRUNC (a.hd_gl_date) BETWEEN NVL ( :p_fm_dt, (a.hd_gl_date))
+                                      AND NVL ( :p_to_dt, (a.hd_gl_date))
+ORDER BY hd_gl_date DESC
       `;
 
       // Execute the query with parameters
       results = (await connection).execute(query, {
+        p_currency: "",
+        p_org_code: "50",
         p_fm_dt: fromDate,
         p_to_dt: toDate,
         branchCode: branchCode,
       });
 
       const formattedData = (await results).rows?.map((row: any) => ({
-        totalNumber: row[0],
-        amountPaid: row[1],
+        claimNo: row[2],
+        intimationDate: row[3],
+        lossDate: row[4],
+        insured: row[20],
+        policyNo: row[7],
+        endNo: row[8],
+        start: row[5],
+        expiry: row[6],
+        sumInsured: row[28],
+        policyClass: row[33],
+        subClass: row[35],
+        accMonth: row[27],
+        paymentDate: row[27],
+        reserveType: row[40],
+        paymentMode: row[21],
+        paymentNo: row[1],
+        paymentType: row[23],
+        paidAt: row[9],
+        belongsTo: row[10],
+        paidAmount: row[30],
       }));
 
       return res.status(200).json({ result: formattedData });
@@ -553,7 +905,21 @@ GROUP BY ent_os_code
       });
 
       const formattedData = (await results).rows?.map((row: any) => ({
-        branchCode: row[19],
+        claimNo: row[4],
+        reportedOn: row[17],
+        lossDate: row[16],
+        insured: row[31],
+        policyNo: row[5],
+        endNo: row[6],
+        commence: row[11],
+        expiry: row[12],
+        sumInsured: row[7],
+        policyClass: row[21],
+        subClass: row[24],
+        intermediary: row[28],
+        policyCover: row[22],
+        belongsTo: row[8],
+        registeredAt: row[9],
         totalProvision: row[36],
       }));
 
@@ -576,7 +942,6 @@ GROUP BY ent_os_code
     let connection;
     let results;
     try {
-      const fromDate: string | any = req.query.fromDate;
       const toDate: string | any = req.query.toDate;
       const branchCode: string | any = req.query.branchCode;
       connection = (await pool).getConnection();
@@ -584,70 +949,197 @@ GROUP BY ent_os_code
 
       // Construct SQL query with conditional parameter inclusion
       let query = `
-           SELECT DISTINCT
-         f.PR_OS_CODE,
-         COUNT (a.cm_no) cnt,
-         SUM (NVL (cm_lc_value, 0)) amnt
-  FROM cm_claims a,
-       cm_claims_risks b,
-       uw_premium_register f,
-       (  SELECT eh_org_code,
-                 eh_cm_index,
-                 NVL (SUM (NVL (cm_closing_value, 0)), 0) cm_lc_value
-            FROM (  SELECT DISTINCT d.eh_org_code,
-                                    d.eh_cm_index,
-                                    d.eh_ce_index,
-                                    d.eh_status,
-                                    NVL (d.eh_new_lc_amount, 0) cm_closing_value
-                      FROM cm_estimates_history d
-                     WHERE d.created_on =
-                              (SELECT DISTINCT MAX (g.created_on)
-                                 FROM cm_estimates_history g
-                                WHERE TRUNC (g.created_on) <= TRUNC (to_date(:p_asatdate))
-                                      AND g.eh_org_code = d.eh_org_code
-                                      AND g.eh_cm_index = d.eh_cm_index
-                                      AND g.eh_ce_index = d.eh_ce_index)
-                           AND TRUNC (d.created_on) <= TRUNC (to_date(:p_asatdate))
-                           AND d.eh_status NOT IN ('Closed', 'Fully Paid')
-                  ORDER BY d.eh_cm_index, d.eh_ce_index)
-        GROUP BY eh_org_code, eh_cm_index) e
-        ,
-     (SELECT DISTINCT a.ch_org_code, a.ch_cm_index, a.created_on,a.ch_status
-          FROM cm_claims_history a
-         WHERE a.created_on =
-                  (SELECT DISTINCT MAX (b.created_on)
-                     FROM cm_claims_history b
-                    WHERE     TRUNC (b.created_on) <= TRUNC (to_date(:p_asatdate))
-                          AND b.ch_org_code = a.ch_org_code
-                          AND b.ch_cm_index = a.ch_cm_index)) g
- WHERE    
-        a.cm_org_code = b.cr_org_code
-       AND a.cm_index = b.cr_cm_index
-       AND a.cm_org_code = f.pr_org_code(+)
-       AND a.cm_pl_index = f.pr_pl_index(+)
-       AND a.cm_end_index = f.pr_end_index(+)
-           and b.cr_mc_code = f.pr_mc_code(+)
-           and b.cr_sc_code = f.pr_sc_code(+)
-       AND a.cm_org_code = g.ch_org_code
-       AND a.cm_index = g.ch_cm_index
-       AND b.cr_org_code = e.eh_org_code(+)
-       AND b.cr_cm_index = e.eh_cm_index(+)
-       AND g.ch_status NOT IN ('Closed','Closed - No Claim')
-       AND a.cm_register = 'Y'
-GROUP BY f.PR_OS_CODE
-ORDER BY  f.PR_OS_CODE
-
+            SELECT a.cm_org_code,
+         a.cm_os_code,
+         (SELECT REPLACE (INITCAP (os_name), 'Branch', '')
+            FROM hi_org_structure
+           WHERE os_code = a.cm_os_code)
+             branch_name,
+         (SELECT os_name
+            FROM hi_org_structure
+           WHERE os_code = (SELECT NVL (os_ref_os_code, os_code)
+                              FROM hi_org_structure
+                             WHERE os_code = cm_os_code))
+             office_name,
+         a.cm_index,
+         a.cm_pl_index,
+         a.cm_end_index,
+         a.cm_no,
+         NULL
+             claim_type,
+         a.cm_pl_no,
+         NVL (a.cm_end_no, f.pr_end_no)
+             cm_end_no,
+         a.cm_pl_master_fm_dt,
+         a.cm_pl_master_to_dt,
+         a.cm_end_to_dt,
+         a.cm_loss_date,
+         TO_CHAR (a.cm_loss_date, 'Mon-RRRR')
+             business_month,
+         a.cm_int_date,
+         a.created_on,
+         INITCAP (
+             pkg_system_admin.get_sc_cover_name (cr_org_code,
+                                                 cr_mc_code,
+                                                 b.cr_cc_code))
+             cover,
+         b.cr_cc_code,
+         TO_CHAR (a.created_on, 'yyyy')
+             cm_created_yr,
+         b.cr_mc_code,
+         INITCAP (pkg_system_admin.get_class_name (cr_org_code, cr_mc_code))
+             class,
+         b.cr_sc_code,
+         pkg_system_admin.get_subclass_name (cr_org_code, cr_sc_code)
+             sub_class,
+         a.cm_int_aent_code,
+         a.cm_int_ent_code,
+         pkg_system_admin.get_entity_name (a.cm_int_aent_code,
+                                           a.cm_int_ent_code)
+             agent,
+         a.cm_aent_code,
+         a.cm_ent_code,
+         pkg_system_admin.get_entity_name (a.cm_aent_code, a.cm_ent_code)
+             insured,
+         ch_status
+             cm_status,
+         a.cm_desc,
+         a.cm_loss_cause,
+         pkg_system_admin.get_system_desc ('CM_LOSS_CAUSE', a.cm_loss_cause)
+             description_of_loss,
+         NVL (pr_lc_si, 0)
+             pl_si,
+         pr_bus_type,
+         NVL (all_reserve.tp_reserve_amnt, 0)
+             tp_reserve_amnt,
+         NVL (all_reserve.od_reserve_amnt, 0)
+             od_reserve_amnt,
+         all_reserve.reserve_type || ' RESERVE'
+             reserve_type,
+         ''
+             action
+    --   g.ch_status
+    FROM cm_claims          a,
+         cm_claims_risks    b,
+         uw_premium_register f,
+         all_entity         ent,
+         (  SELECT eh_org_code,
+                   eh_cm_index,
+                   'OD'                                         reserve_type,
+                   NVL (SUM (NVL (cm_closing_value, 0)), 0)     od_reserve_amnt,
+                   0                                            tp_reserve_amnt
+              FROM (  SELECT DISTINCT
+                             d.eh_org_code,
+                             d.eh_cm_index,
+                             d.eh_ce_index,
+                             d.eh_status,
+                             NVL (d.eh_new_lc_amount, 0)     cm_closing_value
+                        FROM cm_estimates_history d, cm_estimates de
+                       WHERE     d.EH_org_code = de.ce_org_code
+                             AND d.EH_CM_INDEX = de.CE_CM_INDEX
+                             AND d.EH_CE_INDEX = de.CE_INDEX
+                             AND ce_code NOT IN ('TP.001', 'TP.002', 'TP.003')
+                             AND d.created_on =
+                                 (SELECT DISTINCT MAX (g.created_on)
+                                    FROM cm_estimates_history g
+                                   WHERE     TRUNC (g.created_on) <= ( :p_asatdate)
+                                         AND g.eh_org_code = d.eh_org_code
+                                         AND g.eh_cm_index = d.eh_cm_index
+                                         AND g.eh_ce_index = d.eh_ce_index)
+                             AND TRUNC (d.created_on) <= ( :p_asatdate)
+                             AND d.eh_status NOT IN ('Closed', 'Fully Paid')
+                    ORDER BY d.eh_cm_index, d.eh_ce_index)
+          GROUP BY eh_org_code, eh_cm_index
+          UNION ALL
+            SELECT eh_org_code,
+                   eh_cm_index,
+                   'TP'                                         reserve_type,
+                   0                                            od_reserve_amnt,
+                   NVL (SUM (NVL (cm_closing_value, 0)), 0)     tp_reserve_amnt
+              FROM (  SELECT DISTINCT
+                             d.eh_org_code,
+                             d.eh_cm_index,
+                             d.eh_ce_index,
+                             d.eh_status,
+                             NVL (d.eh_new_lc_amount, 0)     cm_closing_value
+                        FROM cm_estimates_history d, cm_estimates de
+                       WHERE     d.EH_org_code = de.ce_org_code
+                             AND d.EH_CM_INDEX = de.CE_CM_INDEX
+                             AND d.EH_CE_INDEX = de.CE_INDEX
+                             AND ce_code IN ('TP.001', 'TP.002', 'TP.003')
+                             AND d.created_on =
+                                 (SELECT DISTINCT MAX (g.created_on)
+                                    FROM cm_estimates_history g
+                                   WHERE     TRUNC (g.created_on) <= ( :p_asatdate)
+                                         AND g.eh_org_code = d.eh_org_code
+                                         AND g.eh_cm_index = d.eh_cm_index
+                                         AND g.eh_ce_index = d.eh_ce_index)
+                             AND TRUNC (d.created_on) <= ( :p_asatdate)
+                             AND d.eh_status NOT IN ('Closed', 'Fully Paid')
+                    ORDER BY d.eh_cm_index, d.eh_ce_index)
+          GROUP BY eh_org_code, eh_cm_index) all_reserve,
+         (SELECT DISTINCT a.ch_org_code,
+                          a.ch_cm_index,
+                          a.created_on,
+                          a.ch_status
+            FROM cm_claims_history a
+           WHERE a.created_on =
+                 (SELECT DISTINCT MAX (b.created_on)
+                    FROM cm_claims_history b
+                   WHERE     TRUNC (b.created_on) <= ( :p_asatdate)
+                         AND b.ch_org_code = a.ch_org_code
+                         AND b.ch_cm_index = a.ch_cm_index)) g
+   WHERE     a.cm_org_code = :p_org_code
+         AND a.cm_org_code = b.cr_org_code
+         AND a.cm_index = b.cr_cm_index
+         and a.CM_OS_CODE=nvl(:branchCode,a.CM_OS_CODE)
+         AND a.cm_int_aent_code = ent.ent_aent_code(+)
+         AND a.cm_int_ent_code = ent.ent_code(+)
+         AND a.cm_org_code = f.pr_org_code(+)
+         AND a.cm_pl_index = f.pr_pl_index(+)
+         AND a.cm_end_index = f.pr_end_index(+)
+         AND b.cr_mc_code = f.pr_mc_code(+)
+         AND b.cr_sc_code = f.pr_sc_code(+)
+         AND a.cm_org_code = g.ch_org_code
+         AND a.cm_index = g.ch_cm_index
+         AND b.cr_org_code = all_reserve.eh_org_code
+         AND b.cr_cm_index = all_reserve.eh_cm_index
+         AND g.ch_status NOT IN ('Closed', 'Closed - No Claim')
+         AND a.cm_register = 'Y'
+ORDER BY CASE
+             WHEN (SUBSTR (a.cm_no, LENGTH (a.cm_no) - 1, LENGTH (a.cm_no))) BETWEEN '85'
+                                                                                 AND '99'
+             THEN
+                 1
+             ELSE
+                 2
+         END,
+         (SUBSTR (a.cm_no, LENGTH (a.cm_no) - 1, LENGTH (a.cm_no))),
+         a.cm_no ASC
       `;
 
       // Execute the query with parameters
       results = (await connection).execute(query, {
         p_asatdate: toDate,
+        branchCode: branchCode,
+        p_org_code: "50",
       });
 
       const formattedData = (await results).rows?.map((row: any) => ({
-        org_code: row[0],
-        count: row[1],
-        totalAmount: row[2],
+        claimNo: row[7],
+        reportedOn: row[16],
+        lossDate: row[14],
+        agent: row[27],
+        insured: row[30],
+        policyNo: row[9],
+        endNo: row[10],
+        start: row[11],
+        expiry: row[12],
+        sumInsured: row[35],
+        subClass: row[24],
+        branch: row[2],
+        provisionMonth: row[15],
+        totalProvision: row[38] + row[37],
       }));
 
       return res.status(200).json({ result: formattedData });
@@ -1397,23 +1889,229 @@ ORDER BY pr_org_code, pr_os_code
 
       // Construct SQL query with conditional parameter inclusion
       let query = `
-       SELECT hd_os_code, NVL (a.lc_amount, 0) hd_rcpt_amt
+
+SELECT a.hd_org_code,
+         a.hd_no                  hd_rcp_no,
+         a.cm_no,
+         a.cm_int_aent_code,
+         a.cm_int_ent_code,
+         a.cm_intermediary,
+         a.cm_aent_code,
+         a.cm_ent_code,
+         a.cm_insured,
+         a.cm_int_date,
+         a.cm_loss_date,
+         a.cm_end_fm_dt,
+         a.cm_end_to_dt,
+         a.cm_pl_no,
+         a.cr_mc_code,
+         a.cr_sc_code,
+         a.ln_aent_code,
+         a.ln_ent_code,
+         a.hd_receipt_mgl_code,
+         a.hd_source,
+         a.hd_received_from,
+         a.ln_narration,
+         a.hd_gl_date,
+         NVL (a.lc_amount, 0)     hd_rcpt_amt
     FROM cm_recovery_receipts_vw a
-   WHERE     (hd_gl_date) BETWEEN ( :p_fm_dt) AND ( :p_to_dt)
-         AND hd_os_code = NVL ( :branchCode, hd_os_code)
-ORDER BY hd_os_code
+   WHERE     a.hd_org_code = :p_org_code
+         AND TRUNC (hd_gl_date) BETWEEN ( :p_fm_dt) AND ( :p_to_dt)
+         and hd_os_code = nvl(:branchCode,hd_os_code)
+ORDER BY hd_rcp_no, (hd_gl_date) ASC
       `;
 
       // Execute the query with parameters
       results = (await connection).execute(query, {
+        p_org_code: "50",
         p_fm_dt: fromDate,
         p_to_dt: toDate,
         branchCode: branchCode,
       });
 
       const formattedData = (await results).rows?.map((row: any) => ({
-        branchCode: row[0],
-        receiptAmount: row[1],
+        recoveryType: row[19],
+        receiptNo: row[1],
+        date: row[22],
+        receievedFrom: row[20],
+        insured: row[8],
+        intermediary: row[5],
+        claimNo: row[2],
+        policyNo: row[13],
+        lossDate: row[10],
+        intimationDate: row[9],
+        commence: row[11],
+        expiry: row[12],
+        receiptAmount: row[23],
+      }));
+
+      return res.status(200).json({ result: formattedData });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: "Internal server error" });
+    } finally {
+      try {
+        if (connection) {
+          (await connection).close();
+          console.info("Connection closed successfully");
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  }
+  async getReinsurance(req: Request, res: Response) {
+    let connection;
+    let results;
+    try {
+      const fromDate: string | any = req.query.fromDate;
+      const toDate: string | any = req.query.toDate;
+      const branchCode: string | any = req.query.branchCode;
+      connection = (await pool).getConnection();
+      console.log("connected to database");
+
+      // Construct SQL query with conditional parameter inclusion
+      let query = `
+SELECT pr_org_code,
+         pr_pl_index,
+         pr_end_index,
+         pr_pl_no,
+         pr_end_no,
+         pr_cur_rate,
+         pr_net_effect,
+         pr_gl_date,
+         pr_fm_dt,
+         pr_to_dt,
+         pr_int_aent_code,
+         pr_int_ent_code,
+         pr_int_ent_name,
+         pr_assr_aent_code,
+         pr_assr_ent_code,
+         pr_assr_ent_name,
+         pr_mc_code,
+         pr_mc_name,
+         pr_sc_code,
+         pr_sc_name,
+         pr_os_code,
+         pr_os_name,
+         b.fh_slip_no,
+         (SELECT PKG_SYSTEM_ADMIN.GET_ENTITY_NAME (pl_flex11, pl_flex12)
+            FROM uh_policy
+           WHERE pl_index = pr_pl_index AND pl_end_index = pr_end_index)
+             cedant_company,
+         NVL (
+             (CASE
+                  WHEN a.pr_net_effect IN ('Credit')
+                  THEN
+                      (  DECODE (
+                             :p_currency,
+                             NULL, (NVL (fh_100p_fc_si, 0) * a.pr_cur_rate),
+                             NVL (fh_100p_fc_si, 0))
+                       * -1)
+                  WHEN a.pr_net_effect IN ('Debit')
+                  THEN
+                      DECODE ( :p_currency,
+                              NULL, (NVL (fh_100p_fc_si, 0) * a.pr_cur_rate),
+                              NVL (fh_100p_fc_si, 0))
+                  ELSE
+                      0
+              END),
+             0)
+             fh_100p_fc_si,
+         NVL (
+             (CASE
+                  WHEN a.pr_net_effect IN ('Credit')
+                  THEN
+                      (  DECODE (
+                             :p_currency,
+                             NULL, (NVL (fh_100p_fc_prem, 0) * a.pr_cur_rate),
+                             NVL (fh_100p_fc_prem, 0))
+                       * -1)
+                  WHEN a.pr_net_effect IN ('Debit')
+                  THEN
+                      DECODE ( :p_currency,
+                              NULL, (NVL (fh_100p_fc_prem, 0) * a.pr_cur_rate),
+                              NVL (fh_100p_fc_prem, 0))
+                  ELSE
+                      0
+              END),
+             0)
+             fh_100p_fc_prem,
+         fh_our_share,
+         NVL (
+             DECODE ( :p_currency, NULL, NVL (pr_lc_si, 0), NVL (pr_fc_si, 0)),
+             0)
+             pr_si,
+         NVL (
+             DECODE (
+                 :p_currency,
+                 NULL,   NVL (pr_lc_prem, 0)
+                       + NVL (pr_lc_eartquake, 0)
+                       + NVL (pr_lc_political, 0),
+                   NVL (pr_fc_prem, 0)
+                 + NVL (pr_fc_eartquake, 0)
+                 + NVL (pr_fc_political, 0)),
+             0)
+             pr_prem,
+         (CASE
+              WHEN a.pr_net_effect IN ('Credit')
+              THEN
+                  (  pkg_uw_00.get_facin_comm (a.pr_org_code,
+                                               a.pr_pl_index,
+                                               a.pr_end_index,
+                                               :p_currency,
+                                               a.pr_mc_code,
+                                               a.pr_sc_code)
+                   * -1)
+              WHEN a.pr_net_effect IN ('Debit')
+              THEN
+                  pkg_uw_00.get_facin_comm (a.pr_org_code,
+                                            a.pr_pl_index,
+                                            a.pr_end_index,
+                                            :p_currency,
+                                            a.pr_mc_code,
+                                            a.pr_sc_code)
+              ELSE
+                  0
+          END)
+             pr_comm
+    FROM vw_premium_register a, uh_policy_facin_header b
+   WHERE     a.pr_org_code = b.fh_org_code(+)
+         AND a.pr_pl_index = b.fh_pl_index(+)
+         AND a.pr_end_index = b.fh_end_index(+)
+         AND a.pr_org_code = :p_org_code
+         AND a.pr_mc_code = b.fh_mc_code
+         AND a.pr_sc_code = b.fh_sc_code
+         AND a.pr_cur_code = NVL ( :p_currency, a.pr_cur_code)
+         AND a.pr_bus_type = '3000'
+         AND PR_OS_CODE = NVL ( :branchCode,PR_OS_CODE)
+         AND TRUNC (PR_GL_DATE) BETWEEN ( :pr_fm_dt) AND ( :pr_to_dt)
+ORDER BY pr_pl_no, pr_end_no ASC
+      `;
+
+      // Execute the query with parameters
+      results = (await connection).execute(query, {
+        p_currency: "",
+        p_org_code: "50",
+        pr_fm_dt: fromDate,
+        pr_to_dt: toDate,
+        branchCode: branchCode,
+      });
+
+      const formattedData = (await results).rows?.map((row: any) => ({
+        recoveryType: row[19],
+        receiptNo: row[1],
+        date: row[22],
+        receievedFrom: row[20],
+        insured: row[8],
+        intermediary: row[5],
+        claimNo: row[2],
+        policyNo: row[13],
+        lossDate: row[10],
+        intimationDate: row[9],
+        commence: row[11],
+        expiry: row[12],
+        receiptAmount: row[23],
       }));
 
       return res.status(200).json({ result: formattedData });
@@ -1443,8 +2141,8 @@ ORDER BY hd_os_code
 
       // Construct SQL query with conditional parameter inclusion
       let query = `
-      SELECT bh_org_code,
-         hd_os_code,
+      /* Formatted on 5/17/2024 2:07:59 PM (QP5 v5.336) */
+  SELECT bh_org_code,
          bh_mc_code,
          UPPER (pkg_system_admin.get_class_name (bh_org_code, bh_mc_code))
              class,
@@ -1636,7 +2334,7 @@ ORDER BY hd_os_code
                        facout_perc,
                    0
                        xol_perc,
-                   NVL (SUM (DECODE (NULL, rs_lc_si, rs_fc_si)), 0)
+                   NVL (SUM (DECODE ( :p_currency, NULL, rs_lc_si, rs_fc_si)), 0)
                        si,
                    NVL (SUM (DECODE (rs_line_type_int, 'Retention', rs_lc_si)),
                         0)
@@ -1673,7 +2371,6 @@ ORDER BY hd_os_code
                    AND cm_line_type = 'RETENTION'
           GROUP BY rh.cm_org_code, rh.cm_cm_index, rh.cm_risk_index) r
    WHERE     hd_org_code = :p_org_code
-         AND hd_os_code = NVL ( :branchCode, hd_os_code)
          AND j.hd_org_code = x.pl_org_code
          AND j.cm_pl_index = x.pl_index
          AND j.cm_end_index = x.pl_end_index
@@ -1686,8 +2383,9 @@ ORDER BY hd_os_code
          AND j.hd_org_code = r.cm_org_code(+)
          AND j.cm_index = r.cm_cm_index(+)
          AND j.cr_risk_index = r.cm_risk_index(+)
-         AND (hd_gl_date) BETWEEN ( :p_fm_dt) AND ( :p_to_dt)
-GROUP BY bh_org_code, bh_mc_code, hd_os_code
+         AND j.hd_os_code = NVL ( :branchCode, j.hd_os_code)
+         AND TRUNC (hd_gl_date) BETWEEN ( :p_fm_dt) AND ( :p_to_dt)
+GROUP BY bh_org_code, bh_mc_code
       `;
 
       // Execute the query with parameters
@@ -1695,20 +2393,17 @@ GROUP BY bh_org_code, bh_mc_code, hd_os_code
         p_org_code: "50",
         p_fm_dt: fromDate,
         p_to_dt: toDate,
+        p_currency: "",
         branchCode: branchCode,
       });
 
       const formattedData = (await results).rows?.map((row: any) => ({
-        org_code: row[0],
-        branchCode: row[1],
-        mc_code: row[2],
-        class: row[3],
+        classOfBusiness: row[2],
         paidAmount: row[4],
-        retentionAmount: row[5],
-        treatyAmount: row[6],
-        comesaAmount: row[7],
-        facAmount: row[8],
-        xolAmount: row[9],
+        retentionAmount: row[4],
+        treatyAmount: row[5],
+        facAmount: row[7],
+        xolAmount: row[8],
       }));
 
       return res.status(200).json({ result: formattedData });

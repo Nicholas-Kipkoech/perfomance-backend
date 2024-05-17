@@ -39,6 +39,9 @@ perfomanceRouter.get("/salvages", (req, res) => {
 perfomanceRouter.get("/recovery", (req, res) => {
   perfomanceController.getRIrecovery(req, res);
 });
+perfomanceRouter.get("/reinsurance", (req, res) => {
+  perfomanceController.getReinsurance(req, res);
+});
 perfomanceRouter.get("/AR-receipts", (req, res) => {
   perfomanceController.getARreceiptsListing(req, res);
 });
