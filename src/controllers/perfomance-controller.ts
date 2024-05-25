@@ -2099,19 +2099,23 @@ ORDER BY pr_pl_no, pr_end_no ASC
       });
 
       const formattedData = (await results).rows?.map((row: any) => ({
-        recoveryType: row[19],
-        receiptNo: row[1],
-        date: row[22],
-        receievedFrom: row[20],
-        insured: row[8],
-        intermediary: row[5],
-        claimNo: row[2],
-        policyNo: row[13],
-        lossDate: row[10],
-        intimationDate: row[9],
-        commence: row[11],
-        expiry: row[12],
-        receiptAmount: row[23],
+        policyNo: row[3],
+        endNo: row[4],
+        slipNo: row[22],
+        insured: row[15],
+        class: row[17],
+        issueDate: row[7],
+        commence: row[8],
+        expiry: row[9],
+        cedingCompany: row[12],
+        cedantCompany: row[23],
+        originalSI: row[24],
+        premium: row[25],
+        share: row[26],
+        grossPremium: row[28],
+        commRate: row[26],
+        FACrecomm: row[29],
+        netPremium: row[29] + row[29],
       }));
 
       return res.status(200).json({ result: formattedData });
