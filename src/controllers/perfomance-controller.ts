@@ -2550,8 +2550,6 @@ ORDER BY hd_gl_date
       let query = `
          SELECT cm_order_no,
          cm_org_code,
-         cm_year,
-         cm_os_code,
          NVL (SUM (DECODE (cm_mc_code, '01', NVL (cm_lc_amount, 0))), 0)
              aviation,
          NVL (SUM (DECODE (cm_mc_code, '02', NVL (cm_lc_amount, 0))), 0)
@@ -2576,55 +2574,570 @@ ORDER BY hd_gl_date
              workmens_compensation,
          NVL (SUM (DECODE (cm_mc_code, '12', NVL (cm_lc_amount, 0))), 0)
              miscellaneous,
-         ROUND (DECODE (cm_order_no,
-                        9,   SUM (NVL (pkg_cust.get_claims_branch_exp_amt (
-                                           cm_org_code,
-                                           8,
-                                           cm_year,
-                                           NULL,
-                                           cm_os_code,
-                                           'LC'),
-                                       0))
-                           / SUM (NULLIF (NVL (pkg_cust.get_claims_branch_exp_amt (
-                                                   cm_org_code,
-                                                   1,
-                                                   cm_year,
-                                                   NULL,
-                                                   cm_os_code,
-                                                   'LC'),
-                                               0),
-                                          0))
-                           * 100,
-                        10,   100
-                            -   SUM (NVL (pkg_cust.get_claims_branch_exp_amt (
-                                              cm_org_code,
-                                              8,
-                                              cm_year,
-                                              NULL,
-                                              cm_os_code,
-                                              'LC'),
-                                          0))
-                              / SUM (NULLIF (NVL (pkg_cust.get_claims_branch_exp_amt (
-                                                      cm_org_code,
-                                                      1,
-                                                      cm_year,
-                                                      NULL,
-                                                      cm_os_code,
-                                                      'LC'),
-                                                  0),
-                                             0))
-                              * 100,
-                        NVL (SUM (NVL (cm_lc_amount, 0)), 0)))
+         NVL (SUM (NVL (cm_lc_amount, 0)), 0)
              total
     FROM CM_CLAIMS_EXPERIENCE_OFFICE
    WHERE     cm_org_code = :p_org_code
          AND cm_os_code = NVL ( :p_os_code, cm_os_code)
          AND cm_year BETWEEN :p_fm_dt AND :p_to_dt
-GROUP BY cm_order_no,
+         AND cm_order_no NOT IN (2,
+                                 4,
+                                 9,
+                                 10)
+GROUP BY cm_order_no, cm_org_code
+UNION
+  SELECT cm_order_no,
          cm_org_code,
-         cm_year,
-         cm_os_code
-ORDER BY cm_year, cm_order_no
+         NVL (SUM (DECODE (cm_mc_code, '01', NVL (cm_lc_amount, 0))), 0)
+             aviation,
+         NVL (SUM (DECODE (cm_mc_code, '02', NVL (cm_lc_amount, 0))), 0)
+             engineering,
+         NVL (SUM (DECODE (cm_mc_code, '03', NVL (cm_lc_amount, 0))), 0)
+             fire_domestic,
+         NVL (SUM (DECODE (cm_mc_code, '04', NVL (cm_lc_amount, 0))), 0)
+             fire_industrial,
+         NVL (SUM (DECODE (cm_mc_code, '05', NVL (cm_lc_amount, 0))), 0)
+             public_liability,
+         NVL (SUM (DECODE (cm_mc_code, '06', NVL (cm_lc_amount, 0))), 0)
+             marine,
+         NVL (SUM (DECODE (cm_mc_code, '070', NVL (cm_lc_amount, 0))), 0)
+             motor_private,
+         NVL (SUM (DECODE (cm_mc_code, '080', NVL (cm_lc_amount, 0))), 0)
+             motor_commercial,
+         NVL (SUM (DECODE (cm_mc_code, '09', NVL (cm_lc_amount, 0))), 0)
+             personal_accident,
+         NVL (SUM (DECODE (cm_mc_code, '10', NVL (cm_lc_amount, 0))), 0)
+             theft,
+         NVL (SUM (DECODE (cm_mc_code, '11', NVL (cm_lc_amount, 0))), 0)
+             workmens_compensation,
+         NVL (SUM (DECODE (cm_mc_code, '12', NVL (cm_lc_amount, 0))), 0)
+             miscellaneous,
+         NVL (SUM (NVL (cm_lc_amount, 0)), 0)
+             total
+    FROM CM_CLAIMS_EXPERIENCE_OFFICE
+   WHERE     cm_org_code = :p_org_code
+         AND cm_os_code = NVL ( :p_os_code, cm_os_code)
+         AND cm_order_no IN (2)
+         AND cm_year = :p_fm_dt
+GROUP BY cm_order_no, cm_org_code
+UNION
+  SELECT cm_order_no,
+         cm_org_code,
+         NVL (SUM (DECODE (cm_mc_code, '01', NVL (cm_lc_amount, 0))), 0)
+             aviation,
+         NVL (SUM (DECODE (cm_mc_code, '02', NVL (cm_lc_amount, 0))), 0)
+             engineering,
+         NVL (SUM (DECODE (cm_mc_code, '03', NVL (cm_lc_amount, 0))), 0)
+             fire_domestic,
+         NVL (SUM (DECODE (cm_mc_code, '04', NVL (cm_lc_amount, 0))), 0)
+             fire_industrial,
+         NVL (SUM (DECODE (cm_mc_code, '05', NVL (cm_lc_amount, 0))), 0)
+             public_liability,
+         NVL (SUM (DECODE (cm_mc_code, '06', NVL (cm_lc_amount, 0))), 0)
+             marine,
+         NVL (SUM (DECODE (cm_mc_code, '070', NVL (cm_lc_amount, 0))), 0)
+             motor_private,
+         NVL (SUM (DECODE (cm_mc_code, '080', NVL (cm_lc_amount, 0))), 0)
+             motor_commercial,
+         NVL (SUM (DECODE (cm_mc_code, '09', NVL (cm_lc_amount, 0))), 0)
+             personal_accident,
+         NVL (SUM (DECODE (cm_mc_code, '10', NVL (cm_lc_amount, 0))), 0)
+             theft,
+         NVL (SUM (DECODE (cm_mc_code, '11', NVL (cm_lc_amount, 0))), 0)
+             workmens_compensation,
+         NVL (SUM (DECODE (cm_mc_code, '12', NVL (cm_lc_amount, 0))), 0)
+             miscellaneous,
+         NVL (SUM (NVL (cm_lc_amount, 0)), 0)
+             total
+    FROM CM_CLAIMS_EXPERIENCE_OFFICE
+   WHERE     cm_org_code = :p_org_code
+         AND cm_os_code = NVL ( :p_os_code, cm_os_code)
+         AND cm_order_no IN (4)
+         AND cm_year = :p_to_dt
+GROUP BY cm_order_no, cm_org_code
+UNION
+  SELECT 9               cm_order_no,
+         cm_org_code,
+         ROUND (
+               ((  NVL (
+                       SUM (
+                           DECODE (
+                               cm_mc_code,
+                               '01', DECODE (cm_order_no,
+                                             8, NVL (cm_lc_amount, 0)))),
+                       0)
+                 / NULLIF (
+                       NVL (
+                           SUM (
+                               DECODE (
+                                   cm_mc_code,
+                                   '01', DECODE (cm_order_no,
+                                                 1, NVL (cm_lc_amount, 0)))),
+                           0),
+                       0)))
+             * 100)      aviation,
+         ROUND (
+               ((  NVL (
+                       SUM (
+                           DECODE (
+                               cm_mc_code,
+                               '02', DECODE (cm_order_no,
+                                             8, NVL (cm_lc_amount, 0)))),
+                       0)
+                 / NULLIF (
+                       NVL (
+                           SUM (
+                               DECODE (
+                                   cm_mc_code,
+                                   '02', DECODE (cm_order_no,
+                                                 1, NVL (cm_lc_amount, 0)))),
+                           0),
+                       0)))
+             * 100)      engineering,
+         ROUND (
+               ((  NVL (
+                       SUM (
+                           DECODE (
+                               cm_mc_code,
+                               '03', DECODE (cm_order_no,
+                                             8, NVL (cm_lc_amount, 0)))),
+                       0)
+                 / NULLIF (
+                       NVL (
+                           SUM (
+                               DECODE (
+                                   cm_mc_code,
+                                   '03', DECODE (cm_order_no,
+                                                 1, NVL (cm_lc_amount, 0)))),
+                           0),
+                       0)))
+             * 100)      fire_domestic,
+         ROUND (
+               ((  NVL (
+                       SUM (
+                           DECODE (
+                               cm_mc_code,
+                               '04', DECODE (cm_order_no,
+                                             8, NVL (cm_lc_amount, 0)))),
+                       0)
+                 / NULLIF (
+                       NVL (
+                           SUM (
+                               DECODE (
+                                   cm_mc_code,
+                                   '04', DECODE (cm_order_no,
+                                                 1, NVL (cm_lc_amount, 0)))),
+                           0),
+                       0)))
+             * 100)      fire_industrial,
+         ROUND (
+               ((  NVL (
+                       SUM (
+                           DECODE (
+                               cm_mc_code,
+                               '05', DECODE (cm_order_no,
+                                             8, NVL (cm_lc_amount, 0)))),
+                       0)
+                 / NULLIF (
+                       NVL (
+                           SUM (
+                               DECODE (
+                                   cm_mc_code,
+                                   '05', DECODE (cm_order_no,
+                                                 1, NVL (cm_lc_amount, 0)))),
+                           0),
+                       0)))
+             * 100)      public_liability,
+         ROUND (
+               ((  NVL (
+                       SUM (
+                           DECODE (
+                               cm_mc_code,
+                               '06', DECODE (cm_order_no,
+                                             8, NVL (cm_lc_amount, 0)))),
+                       0)
+                 / NULLIF (
+                       NVL (
+                           SUM (
+                               DECODE (
+                                   cm_mc_code,
+                                   '06', DECODE (cm_order_no,
+                                                 1, NVL (cm_lc_amount, 0)))),
+                           0),
+                       0)))
+             * 100)      marine,
+         ROUND (
+               ((  NVL (
+                       SUM (
+                           DECODE (
+                               cm_mc_code,
+                               '070', DECODE (cm_order_no,
+                                              8, NVL (cm_lc_amount, 0)))),
+                       0)
+                 / NULLIF (
+                       NVL (
+                           SUM (
+                               DECODE (
+                                   cm_mc_code,
+                                   '070', DECODE (cm_order_no,
+                                                  1, NVL (cm_lc_amount, 0)))),
+                           0),
+                       0)))
+             * 100)      motor_private,
+         ROUND (
+               ((  NVL (
+                       SUM (
+                           DECODE (
+                               cm_mc_code,
+                               '080', DECODE (cm_order_no,
+                                              8, NVL (cm_lc_amount, 0)))),
+                       0)
+                 / NULLIF (
+                       NVL (
+                           SUM (
+                               DECODE (
+                                   cm_mc_code,
+                                   '080', DECODE (cm_order_no,
+                                                  1, NVL (cm_lc_amount, 0)))),
+                           0),
+                       0)))
+             * 100)      motor_commercial,
+         ROUND (
+               ((  NVL (
+                       SUM (
+                           DECODE (
+                               cm_mc_code,
+                               '09', DECODE (cm_order_no,
+                                             8, NVL (cm_lc_amount, 0)))),
+                       0)
+                 / NULLIF (
+                       NVL (
+                           SUM (
+                               DECODE (
+                                   cm_mc_code,
+                                   '09', DECODE (cm_order_no,
+                                                 1, NVL (cm_lc_amount, 0)))),
+                           0),
+                       0)))
+             * 100)      personal_accident,
+         ROUND (
+               ((  NVL (
+                       SUM (
+                           DECODE (
+                               cm_mc_code,
+                               '10', DECODE (cm_order_no,
+                                             8, NVL (cm_lc_amount, 0)))),
+                       0)
+                 / NULLIF (
+                       NVL (
+                           SUM (
+                               DECODE (
+                                   cm_mc_code,
+                                   '10', DECODE (cm_order_no,
+                                                 1, NVL (cm_lc_amount, 0)))),
+                           0),
+                       0)))
+             * 100)      theft,
+         ROUND (
+               ((  NVL (
+                       SUM (
+                           DECODE (
+                               cm_mc_code,
+                               '11', DECODE (cm_order_no,
+                                             8, NVL (cm_lc_amount, 0)))),
+                       0)
+                 / NULLIF (
+                       NVL (
+                           SUM (
+                               DECODE (
+                                   cm_mc_code,
+                                   '11', DECODE (cm_order_no,
+                                                 1, NVL (cm_lc_amount, 0)))),
+                           0),
+                       0)))
+             * 100)      workmens_compensation,
+         ROUND (
+               ((  NVL (
+                       SUM (
+                           DECODE (
+                               cm_mc_code,
+                               '12', DECODE (cm_order_no,
+                                             8, NVL (cm_lc_amount, 0)))),
+                       0)
+                 / NULLIF (
+                       NVL (
+                           SUM (
+                               DECODE (
+                                   cm_mc_code,
+                                   '12', DECODE (cm_order_no,
+                                                 1, NVL (cm_lc_amount, 0)))),
+                           0),
+                       0)))
+             * 100)      miscellaneous,
+         ROUND (
+             (  (  NVL (SUM (DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0))),
+                        0)
+                 / NULLIF (
+                       NVL (
+                           SUM (DECODE (cm_order_no, 1, NVL (cm_lc_amount, 0))),
+                           0),
+                       0))
+              * 100))    total
+    FROM CM_CLAIMS_EXPERIENCE_OFFICE
+   WHERE     cm_org_code = :p_org_code
+         AND cm_os_code = NVL ( :p_os_code, cm_os_code)
+         AND cm_year BETWEEN :p_fm_dt AND :p_to_dt
+         AND cm_order_no IN (1, 8)
+GROUP BY 9, cm_org_code
+UNION
+  SELECT 10                cm_order_no,
+         cm_org_code,
+           100
+         - ROUND (
+                 ((  NVL (
+                         SUM (
+                             DECODE (
+                                 cm_mc_code,
+                                 '01', DECODE (cm_order_no,
+                                               8, NVL (cm_lc_amount, 0)))),
+                         0)
+                   / NULLIF (
+                         NVL (
+                             SUM (
+                                 DECODE (
+                                     cm_mc_code,
+                                     '01', DECODE (cm_order_no,
+                                                   1, NVL (cm_lc_amount, 0)))),
+                             0),
+                         0)))
+               * 100)      aviation,
+           100
+         - ROUND (
+                 ((  NVL (
+                         SUM (
+                             DECODE (
+                                 cm_mc_code,
+                                 '02', DECODE (cm_order_no,
+                                               8, NVL (cm_lc_amount, 0)))),
+                         0)
+                   / NULLIF (
+                         NVL (
+                             SUM (
+                                 DECODE (
+                                     cm_mc_code,
+                                     '02', DECODE (cm_order_no,
+                                                   1, NVL (cm_lc_amount, 0)))),
+                             0),
+                         0)))
+               * 100)      engineering,
+           100
+         - ROUND (
+                 ((  NVL (
+                         SUM (
+                             DECODE (
+                                 cm_mc_code,
+                                 '03', DECODE (cm_order_no,
+                                               8, NVL (cm_lc_amount, 0)))),
+                         0)
+                   / NULLIF (
+                         NVL (
+                             SUM (
+                                 DECODE (
+                                     cm_mc_code,
+                                     '03', DECODE (cm_order_no,
+                                                   1, NVL (cm_lc_amount, 0)))),
+                             0),
+                         0)))
+               * 100)      fire_domestic,
+           100
+         - ROUND (
+                 ((  NVL (
+                         SUM (
+                             DECODE (
+                                 cm_mc_code,
+                                 '04', DECODE (cm_order_no,
+                                               8, NVL (cm_lc_amount, 0)))),
+                         0)
+                   / NULLIF (
+                         NVL (
+                             SUM (
+                                 DECODE (
+                                     cm_mc_code,
+                                     '04', DECODE (cm_order_no,
+                                                   1, NVL (cm_lc_amount, 0)))),
+                             0),
+                         0)))
+               * 100)      fire_industrial,
+           100
+         - ROUND (
+                 ((  NVL (
+                         SUM (
+                             DECODE (
+                                 cm_mc_code,
+                                 '05', DECODE (cm_order_no,
+                                               8, NVL (cm_lc_amount, 0)))),
+                         0)
+                   / NULLIF (
+                         NVL (
+                             SUM (
+                                 DECODE (
+                                     cm_mc_code,
+                                     '05', DECODE (cm_order_no,
+                                                   1, NVL (cm_lc_amount, 0)))),
+                             0),
+                         0)))
+               * 100)      public_liability,
+           100
+         - ROUND (
+                 ((  NVL (
+                         SUM (
+                             DECODE (
+                                 cm_mc_code,
+                                 '06', DECODE (cm_order_no,
+                                               8, NVL (cm_lc_amount, 0)))),
+                         0)
+                   / NULLIF (
+                         NVL (
+                             SUM (
+                                 DECODE (
+                                     cm_mc_code,
+                                     '06', DECODE (cm_order_no,
+                                                   1, NVL (cm_lc_amount, 0)))),
+                             0),
+                         0)))
+               * 100)      marine,
+           100
+         - ROUND (
+                 ((  NVL (
+                         SUM (
+                             DECODE (
+                                 cm_mc_code,
+                                 '070', DECODE (cm_order_no,
+                                                8, NVL (cm_lc_amount, 0)))),
+                         0)
+                   / NULLIF (
+                         NVL (
+                             SUM (
+                                 DECODE (
+                                     cm_mc_code,
+                                     '070', DECODE (cm_order_no,
+                                                    1, NVL (cm_lc_amount, 0)))),
+                             0),
+                         0)))
+               * 100)      motor_private,
+           100
+         - ROUND (
+                 ((  NVL (
+                         SUM (
+                             DECODE (
+                                 cm_mc_code,
+                                 '080', DECODE (cm_order_no,
+                                                8, NVL (cm_lc_amount, 0)))),
+                         0)
+                   / NULLIF (
+                         NVL (
+                             SUM (
+                                 DECODE (
+                                     cm_mc_code,
+                                     '080', DECODE (cm_order_no,
+                                                    1, NVL (cm_lc_amount, 0)))),
+                             0),
+                         0)))
+               * 100)      motor_commercial,
+           100
+         - ROUND (
+                 ((  NVL (
+                         SUM (
+                             DECODE (
+                                 cm_mc_code,
+                                 '09', DECODE (cm_order_no,
+                                               8, NVL (cm_lc_amount, 0)))),
+                         0)
+                   / NULLIF (
+                         NVL (
+                             SUM (
+                                 DECODE (
+                                     cm_mc_code,
+                                     '09', DECODE (cm_order_no,
+                                                   1, NVL (cm_lc_amount, 0)))),
+                             0),
+                         0)))
+               * 100)      personal_accident,
+           100
+         - ROUND (
+                 ((  NVL (
+                         SUM (
+                             DECODE (
+                                 cm_mc_code,
+                                 '10', DECODE (cm_order_no,
+                                               8, NVL (cm_lc_amount, 0)))),
+                         0)
+                   / NULLIF (
+                         NVL (
+                             SUM (
+                                 DECODE (
+                                     cm_mc_code,
+                                     '10', DECODE (cm_order_no,
+                                                   1, NVL (cm_lc_amount, 0)))),
+                             0),
+                         0)))
+               * 100)      theft,
+           100
+         - ROUND (
+                 ((  NVL (
+                         SUM (
+                             DECODE (
+                                 cm_mc_code,
+                                 '11', DECODE (cm_order_no,
+                                               8, NVL (cm_lc_amount, 0)))),
+                         0)
+                   / NULLIF (
+                         NVL (
+                             SUM (
+                                 DECODE (
+                                     cm_mc_code,
+                                     '11', DECODE (cm_order_no,
+                                                   1, NVL (cm_lc_amount, 0)))),
+                             0),
+                         0)))
+               * 100)      workmens_compensation,
+           100
+         - ROUND (
+                 ((  NVL (
+                         SUM (
+                             DECODE (
+                                 cm_mc_code,
+                                 '12', DECODE (cm_order_no,
+                                               8, NVL (cm_lc_amount, 0)))),
+                         0)
+                   / NULLIF (
+                         NVL (
+                             SUM (
+                                 DECODE (
+                                     cm_mc_code,
+                                     '12', DECODE (cm_order_no,
+                                                   1, NVL (cm_lc_amount, 0)))),
+                             0),
+                         0)))
+               * 100)      miscellaneous,
+           100
+         - ROUND (
+               (  (  NVL (SUM (DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0))),
+                          0)
+                   / NULLIF (
+                         NVL (
+                             SUM (
+                                 DECODE (cm_order_no, 1, NVL (cm_lc_amount, 0))),
+                             0),
+                         0))
+                * 100))    total
+    FROM CM_CLAIMS_EXPERIENCE_OFFICE
+   WHERE     cm_org_code = :p_org_code
+         AND cm_os_code = NVL ( :p_os_code, cm_os_code)
+         AND cm_year BETWEEN :p_fm_dt AND :p_to_dt
+         AND cm_order_no IN (1, 8)
+GROUP BY 10, cm_org_code
+ORDER BY cm_order_no
       `;
 
       // Execute the query with parameters
@@ -2637,7 +3150,7 @@ ORDER BY cm_year, cm_order_no
 
       const formattedData = (await results).rows?.map((row: any) => ({
         cm_order_no: row[0],
-        total: row[16],
+        total: row[14],
       }));
 
       return res.status(200).json({ result: formattedData });
