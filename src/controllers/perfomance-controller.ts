@@ -2536,6 +2536,125 @@ ORDER BY hd_gl_date
       }
     }
   }
+  async getCMLossRatio(req: Request, res: Response) {
+    let connection;
+    let results;
+    try {
+      const fromDate: string | any = req.query.fromDate;
+      const toDate: string | any = req.query.toDate;
+      const branchCode: string | any = req.query.branchCode;
+      connection = (await pool).getConnection();
+      console.log("connected to database");
+
+      // Construct SQL query with conditional parameter inclusion
+      let query = `
+         SELECT cm_order_no,
+         cm_org_code,
+         cm_year,
+         cm_os_code,
+         NVL (SUM (DECODE (cm_mc_code, '01', NVL (cm_lc_amount, 0))), 0)
+             aviation,
+         NVL (SUM (DECODE (cm_mc_code, '02', NVL (cm_lc_amount, 0))), 0)
+             engineering,
+         NVL (SUM (DECODE (cm_mc_code, '03', NVL (cm_lc_amount, 0))), 0)
+             fire_domestic,
+         NVL (SUM (DECODE (cm_mc_code, '04', NVL (cm_lc_amount, 0))), 0)
+             fire_industrial,
+         NVL (SUM (DECODE (cm_mc_code, '05', NVL (cm_lc_amount, 0))), 0)
+             public_liability,
+         NVL (SUM (DECODE (cm_mc_code, '06', NVL (cm_lc_amount, 0))), 0)
+             marine,
+         NVL (SUM (DECODE (cm_mc_code, '070', NVL (cm_lc_amount, 0))), 0)
+             motor_private,
+         NVL (SUM (DECODE (cm_mc_code, '080', NVL (cm_lc_amount, 0))), 0)
+             motor_commercial,
+         NVL (SUM (DECODE (cm_mc_code, '09', NVL (cm_lc_amount, 0))), 0)
+             personal_accident,
+         NVL (SUM (DECODE (cm_mc_code, '10', NVL (cm_lc_amount, 0))), 0)
+             theft,
+         NVL (SUM (DECODE (cm_mc_code, '11', NVL (cm_lc_amount, 0))), 0)
+             workmens_compensation,
+         NVL (SUM (DECODE (cm_mc_code, '12', NVL (cm_lc_amount, 0))), 0)
+             miscellaneous,
+         ROUND (DECODE (cm_order_no,
+                        9,   SUM (NVL (pkg_cust.get_claims_branch_exp_amt (
+                                           cm_org_code,
+                                           8,
+                                           cm_year,
+                                           NULL,
+                                           cm_os_code,
+                                           'LC'),
+                                       0))
+                           / SUM (NULLIF (NVL (pkg_cust.get_claims_branch_exp_amt (
+                                                   cm_org_code,
+                                                   1,
+                                                   cm_year,
+                                                   NULL,
+                                                   cm_os_code,
+                                                   'LC'),
+                                               0),
+                                          0))
+                           * 100,
+                        10,   100
+                            -   SUM (NVL (pkg_cust.get_claims_branch_exp_amt (
+                                              cm_org_code,
+                                              8,
+                                              cm_year,
+                                              NULL,
+                                              cm_os_code,
+                                              'LC'),
+                                          0))
+                              / SUM (NULLIF (NVL (pkg_cust.get_claims_branch_exp_amt (
+                                                      cm_org_code,
+                                                      1,
+                                                      cm_year,
+                                                      NULL,
+                                                      cm_os_code,
+                                                      'LC'),
+                                                  0),
+                                             0))
+                              * 100,
+                        NVL (SUM (NVL (cm_lc_amount, 0)), 0)))
+             total
+    FROM CM_CLAIMS_EXPERIENCE_OFFICE
+   WHERE     cm_org_code = :p_org_code
+         AND cm_os_code = NVL ( :p_os_code, cm_os_code)
+         AND cm_year BETWEEN :p_fm_dt AND :p_to_dt
+GROUP BY cm_order_no,
+         cm_org_code,
+         cm_year,
+         cm_os_code
+ORDER BY cm_year, cm_order_no
+      `;
+
+      // Execute the query with parameters
+      results = (await connection).execute(query, {
+        p_org_code: "50",
+        p_fm_dt: fromDate,
+        p_to_dt: toDate,
+        p_os_code: branchCode,
+      });
+
+      const formattedData = (await results).rows?.map((row: any) => ({
+        cm_order_no: row[0],
+        total: row[16],
+      }));
+
+      return res.status(200).json({ result: formattedData });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: "Internal server error" });
+    } finally {
+      try {
+        if (connection) {
+          (await connection).close();
+          console.info("Connection closed successfully");
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  }
 }
 
 const performanceController = new PerformanceController();

@@ -46,4 +46,8 @@ perfomanceRouter.get("/AR-receipts", (req, res) => {
   perfomanceController.getARreceiptsListing(req, res);
 });
 
+perfomanceRouter.get("/cm-loss-ratio", (req, res) => {
+  perfomanceController.getCMLossRatio(req, res);
+});
+
 export default perfomanceRouter;
