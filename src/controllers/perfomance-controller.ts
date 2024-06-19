@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import pool from "../database/database";
 import oracledb from "oracledb";
 import jwt from "jsonwebtoken";
+import { formatDate } from "../utils/utils";
 
 class PerformanceController {
   constructor() {}
@@ -757,6 +758,7 @@ ORDER BY hd_gl_date DESC
         paidAt: row[9],
         belongsTo: row[10],
         paidAmount: row[30],
+        motorCode: row[31],
       }));
 
       return res.status(200).json({ result: formattedData });
@@ -921,6 +923,7 @@ ORDER BY hd_gl_date DESC
         belongsTo: row[8],
         registeredAt: row[9],
         totalProvision: row[36],
+        motorCode: row[20],
       }));
 
       return res.status(200).json({ result: formattedData });
@@ -1140,6 +1143,7 @@ ORDER BY CASE
         branch: row[2],
         provisionMonth: row[15],
         totalProvision: row[38] + row[37],
+        motorCode: row[21],
       }));
 
       return res.status(200).json({ result: formattedData });
@@ -2536,6 +2540,210 @@ ORDER BY hd_gl_date
       }
     }
   }
+  async getRICessionsPrem(req: Request, res: Response) {
+    let connection;
+    let results;
+    try {
+      const fromDate: string | any = req.query.fromDate;
+      const toDate: string | any = req.query.toDate;
+      const branchCode: string | any = req.query.branchCode;
+      connection = (await pool).getConnection();
+      console.log("connected to database");
+
+      // Construct SQL query with conditional parameter inclusion
+      let query = `
+         SELECT class,
+         SUM (gross_prem)       gross_prem,
+         SUM (gross_comm)       gross_comm,
+         SUM (commesa_prem)     commesa_prem,
+         SUM (commesa_comm)     commesa_comm,
+         SUM (treaty_prem)      treaty_prem,
+         SUM (treaty_comm)      treaty_comm,
+         SUM (fac_prem)         fac_prem,
+         SUM (fac_comm)         fac_comm,
+         0                      auto_fac
+    FROM (  SELECT pr_org_code,
+                   class1,
+                   pr_mc_code,
+                   SUM (pr_lc_prem)     gross_prem,
+                   SUM (broker_com)     gross_comm,
+                   SUM (broker_com)     broker_com
+              FROM (SELECT pr_org_code,
+                           pr_mc_code,
+                           UPPER (
+                               pkg_system_admin.get_class_name (pr_org_code,
+                                                                pr_mc_code))
+                               class1,
+                           NVL (
+                               (  DECODE (
+                                      :p_currency,
+                                      NULL, NVL (
+                                                (  (  NVL (pr_fc_prem, 0)
+                                                    + NVL (pr_fc_eartquake, 0)
+                                                    + NVL (pr_fc_political, 0))
+                                                 * pr_cur_rate),
+                                                0),
+                                      (  NVL (pr_fc_prem, 0)
+                                       + NVL (pr_fc_eartquake, 0)
+                                       + NVL (pr_fc_political, 0)))
+                                * DECODE (pr_net_effect,
+                                          'Credit', -1,
+                                          'Debit', 1,
+                                          0)),
+                               0)
+                               pr_lc_prem,
+                             NVL (
+                                 (DECODE (
+                                      :p_currency,
+                                      NULL, NVL (
+                                                (pr_fc_broker_comm * pr_cur_rate),
+                                                0),
+                                      NVL (pr_fc_broker_comm, 0), 0)),
+                                 0)
+                           * DECODE (pr_net_effect,
+                                     'Credit', -1,
+                                     'Debit', 1,
+                                     0)
+                               broker_com
+                      FROM uw_premium_register
+                     WHERE     pr_org_code = :p_org_code
+                           AND TRUNC (pr_gl_date) BETWEEN ( :p_fm_dt)
+                                                      AND ( :p_to_dt))
+          GROUP BY pr_org_code, pr_mc_code, class1) premium,
+         (  SELECT bh_org_code,
+                   bh_mc_code,
+                   UPPER (
+                       pkg_system_admin.get_class_name (bh_org_code, bh_mc_code))
+                       class,
+                   SUM (
+                       CASE
+                           WHEN (pr_end_code NOT IN ('20003', '20004'))
+                           THEN
+                               DECODE (
+                                   :p_currency,
+                                   NULL,   NVL (a.qs_lc_prem, 0)
+                                         + NVL (a.cqs_lc_prem, 0)
+                                         + NVL (a.surplus1_lc_prem, 0)
+                                         + NVL (a.surplus2_lc_prem, 0),
+                                     NVL (a.qs_fc_prem, 0)
+                                   + NVL (a.cqs_fc_prem, 0)
+                                   + NVL (a.surplus1_fc_prem, 0)
+                                   + NVL (a.surplus2_fc_prem, 0))
+                           ELSE
+                               0
+                       END)
+                       treaty_prem,
+                   SUM (
+                       CASE
+                           WHEN (pr_end_code IN ('20003', '20004'))
+                           THEN
+                               DECODE (
+                                   :p_currency,
+                                   NULL,   NVL (a.qs_lc_prem, 0)
+                                         + NVL (a.cqs_lc_prem, 0)
+                                         + NVL (a.surplus1_lc_prem, 0)
+                                         + NVL (a.surplus2_lc_prem, 0),
+                                     NVL (a.qs_fc_prem, 0)
+                                   + NVL (a.cqs_fc_prem, 0)
+                                   + NVL (a.surplus1_fc_prem, 0)
+                                   + NVL (a.surplus2_fc_prem, 0))
+                           ELSE
+                               0
+                       END)
+                       commesa_prem,
+                   SUM (
+                       CASE
+                           WHEN (pr_end_code NOT IN ('20003', '20004'))
+                           THEN
+                               DECODE (
+                                   :p_currency,
+                                   NULL,   NVL (a.qs_lc_comm, 0)
+                                         + NVL (a.cqs_lc_comm, 0)
+                                         + NVL (a.surplus1_lc_comm, 0)
+                                         + NVL (a.surplus2_lc_comm, 0),
+                                     NVL (a.qs_fc_comm, 0)
+                                   + NVL (a.cqs_fc_comm, 0)
+                                   + NVL (a.surplus1_fc_comm, 0)
+                                   + NVL (a.surplus2_fc_comm, 0))
+                           ELSE
+                               0
+                       END)
+                       treaty_comm,
+                   SUM (
+                       CASE
+                           WHEN (pr_end_code IN ('20003', '20004'))
+                           THEN
+                               DECODE (
+                                   :p_currency,
+                                   NULL,   NVL (a.qs_lc_comm, 0)
+                                         + NVL (a.cqs_lc_comm, 0)
+                                         + NVL (a.surplus1_lc_comm, 0)
+                                         + NVL (a.surplus2_lc_comm, 0),
+                                     NVL (a.qs_fc_comm, 0)
+                                   + NVL (a.cqs_fc_comm, 0)
+                                   + NVL (a.surplus1_fc_comm, 0)
+                                   + NVL (a.surplus2_fc_comm, 0))
+                           ELSE
+                               0
+                       END)
+                       commesa_comm,
+                   SUM (
+                       DECODE ( :p_currency,
+                               NULL, NVL (a.facout_lc_prem, 0),
+                               NVL (a.facout_fc_prem, 0)))
+                       fac_prem,
+                   SUM (
+                       DECODE ( :p_currency,
+                               NULL, NVL (a.facout_lc_comm, 0),
+                               NVL (a.facout_fc_comm, 0)))
+                       fac_comm
+              FROM ri_gl_register a, uw_premium_register b
+             WHERE     bh_org_code = :p_org_code
+                   AND bh_os_code = NVL ( :branchCode, bh_os_code)
+                   AND pr_org_code = bh_org_code
+                   AND pr_pl_index = bh_pol_index
+                   AND pr_end_index = bh_pol_end_index
+                   AND bh_mc_code = pr_mc_code(+)
+                   AND bh_sc_code = pr_sc_code(+)
+                   AND TRUNC (bh_gl_date) BETWEEN ( :p_fm_dt) AND ( :p_to_dt)
+          GROUP BY bh_org_code, bh_mc_code) treaty_prems
+   WHERE     premium.pr_org_code = treaty_prems.bh_org_code
+         AND premium.pr_mc_code = treaty_prems.bh_mc_code
+GROUP BY class, pr_mc_code
+ORDER BY pr_mc_code
+      `;
+
+      // Execute the query with parameters
+      results = (await connection).execute(query, {
+        p_org_code: "50",
+        p_currency: "",
+        p_fm_dt: fromDate,
+        p_to_dt: toDate,
+        branchCode: branchCode,
+      });
+
+      const formattedData = (await results).rows?.map((row: any) => ({
+        treatyPremium: row[5],
+        treatyCommission: row[6],
+        facPremium: row[7],
+        facCommission: row[8],
+      }));
+
+      return res.status(200).json({ result: formattedData });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: "Internal server error" });
+    } finally {
+      try {
+        if (connection) {
+          (await connection).close();
+          console.info("Connection closed successfully");
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  }
   async getCMLossRatio(req: Request, res: Response) {
     let connection;
     let results;
@@ -2551,606 +2759,2053 @@ ORDER BY hd_gl_date
          SELECT cm_order_no,
          cm_org_code,
          NVL (SUM (DECODE (cm_mc_code, '01', NVL (cm_lc_amount, 0))), 0)
-             aviation,
+            aviation,
          NVL (SUM (DECODE (cm_mc_code, '02', NVL (cm_lc_amount, 0))), 0)
-             engineering,
+            engineering,
          NVL (SUM (DECODE (cm_mc_code, '03', NVL (cm_lc_amount, 0))), 0)
-             fire_domestic,
+            fire_domestic,
          NVL (SUM (DECODE (cm_mc_code, '04', NVL (cm_lc_amount, 0))), 0)
-             fire_industrial,
+            fire_industrial,
          NVL (SUM (DECODE (cm_mc_code, '05', NVL (cm_lc_amount, 0))), 0)
-             public_liability,
-         NVL (SUM (DECODE (cm_mc_code, '06', NVL (cm_lc_amount, 0))), 0)
-             marine,
+            public_liability,
+         NVL (SUM (DECODE (cm_mc_code, '06', NVL (cm_lc_amount, 0))), 0) marine,
          NVL (SUM (DECODE (cm_mc_code, '070', NVL (cm_lc_amount, 0))), 0)
-             motor_private,
+            motor_private,
          NVL (SUM (DECODE (cm_mc_code, '080', NVL (cm_lc_amount, 0))), 0)
-             motor_commercial,
+            motor_commercial,
          NVL (SUM (DECODE (cm_mc_code, '09', NVL (cm_lc_amount, 0))), 0)
-             personal_accident,
-         NVL (SUM (DECODE (cm_mc_code, '10', NVL (cm_lc_amount, 0))), 0)
-             theft,
+            personal_accident,
+         NVL (SUM (DECODE (cm_mc_code, '10', NVL (cm_lc_amount, 0))), 0) theft,
          NVL (SUM (DECODE (cm_mc_code, '11', NVL (cm_lc_amount, 0))), 0)
-             workmens_compensation,
+            workmens_compensation,
          NVL (SUM (DECODE (cm_mc_code, '12', NVL (cm_lc_amount, 0))), 0)
-             miscellaneous,
-         NVL (SUM (NVL (cm_lc_amount, 0)), 0)
-             total
+            miscellaneous,
+         NVL (SUM (NVL (cm_lc_amount, 0)), 0) total
     FROM CM_CLAIMS_EXPERIENCE_OFFICE
-   WHERE     cm_org_code = :p_org_code
-         AND cm_os_code = NVL ( :p_os_code, cm_os_code)
-         AND cm_year BETWEEN :p_fm_dt AND :p_to_dt
-         AND cm_order_no NOT IN (2,
-                                 4,
-                                 9,
-                                 10)
-GROUP BY cm_order_no, cm_org_code
-UNION
+   WHERE cm_org_code = :p_org_code
+         and cm_os_code = NVL(:p_os_code,cm_os_code)
+         AND cm_year BETWEEN TO_CHAR (:p_fm_dt, 'yyyy')
+                         AND TO_CHAR (:p_to_dt, 'yyyy')
+         AND cm_order_no NOT IN (2, 4, 9, 10)
+GROUP BY cm_order_no,
+         cm_org_code
+         UNION
   SELECT cm_order_no,
          cm_org_code,
          NVL (SUM (DECODE (cm_mc_code, '01', NVL (cm_lc_amount, 0))), 0)
-             aviation,
+            aviation,
          NVL (SUM (DECODE (cm_mc_code, '02', NVL (cm_lc_amount, 0))), 0)
-             engineering,
+            engineering,
          NVL (SUM (DECODE (cm_mc_code, '03', NVL (cm_lc_amount, 0))), 0)
-             fire_domestic,
+            fire_domestic,
          NVL (SUM (DECODE (cm_mc_code, '04', NVL (cm_lc_amount, 0))), 0)
-             fire_industrial,
+            fire_industrial,
          NVL (SUM (DECODE (cm_mc_code, '05', NVL (cm_lc_amount, 0))), 0)
-             public_liability,
-         NVL (SUM (DECODE (cm_mc_code, '06', NVL (cm_lc_amount, 0))), 0)
-             marine,
+            public_liability,
+         NVL (SUM (DECODE (cm_mc_code, '06', NVL (cm_lc_amount, 0))), 0) marine,
          NVL (SUM (DECODE (cm_mc_code, '070', NVL (cm_lc_amount, 0))), 0)
-             motor_private,
+            motor_private,
          NVL (SUM (DECODE (cm_mc_code, '080', NVL (cm_lc_amount, 0))), 0)
-             motor_commercial,
+            motor_commercial,
          NVL (SUM (DECODE (cm_mc_code, '09', NVL (cm_lc_amount, 0))), 0)
-             personal_accident,
-         NVL (SUM (DECODE (cm_mc_code, '10', NVL (cm_lc_amount, 0))), 0)
-             theft,
+            personal_accident,
+         NVL (SUM (DECODE (cm_mc_code, '10', NVL (cm_lc_amount, 0))), 0) theft,
          NVL (SUM (DECODE (cm_mc_code, '11', NVL (cm_lc_amount, 0))), 0)
-             workmens_compensation,
+            workmens_compensation,
          NVL (SUM (DECODE (cm_mc_code, '12', NVL (cm_lc_amount, 0))), 0)
-             miscellaneous,
-         NVL (SUM (NVL (cm_lc_amount, 0)), 0)
-             total
+            miscellaneous,
+         NVL (SUM (NVL (cm_lc_amount, 0)), 0) total
     FROM CM_CLAIMS_EXPERIENCE_OFFICE
-   WHERE     cm_org_code = :p_org_code
-         AND cm_os_code = NVL ( :p_os_code, cm_os_code)
+   WHERE cm_org_code = :p_org_code
+         and cm_os_code = NVL(:p_os_code,cm_os_code)
          AND cm_order_no IN (2)
-         AND cm_year = :p_fm_dt
-GROUP BY cm_order_no, cm_org_code
+         AND cm_year = TO_CHAR (:p_fm_dt, 'yyyy')
+GROUP BY cm_order_no,
+         cm_org_code
 UNION
   SELECT cm_order_no,
          cm_org_code,
          NVL (SUM (DECODE (cm_mc_code, '01', NVL (cm_lc_amount, 0))), 0)
-             aviation,
+            aviation,
          NVL (SUM (DECODE (cm_mc_code, '02', NVL (cm_lc_amount, 0))), 0)
-             engineering,
+            engineering,
          NVL (SUM (DECODE (cm_mc_code, '03', NVL (cm_lc_amount, 0))), 0)
-             fire_domestic,
+            fire_domestic,
          NVL (SUM (DECODE (cm_mc_code, '04', NVL (cm_lc_amount, 0))), 0)
-             fire_industrial,
+            fire_industrial,
          NVL (SUM (DECODE (cm_mc_code, '05', NVL (cm_lc_amount, 0))), 0)
-             public_liability,
-         NVL (SUM (DECODE (cm_mc_code, '06', NVL (cm_lc_amount, 0))), 0)
-             marine,
+            public_liability,
+         NVL (SUM (DECODE (cm_mc_code, '06', NVL (cm_lc_amount, 0))), 0) marine,
          NVL (SUM (DECODE (cm_mc_code, '070', NVL (cm_lc_amount, 0))), 0)
-             motor_private,
+            motor_private,
          NVL (SUM (DECODE (cm_mc_code, '080', NVL (cm_lc_amount, 0))), 0)
-             motor_commercial,
+            motor_commercial,
          NVL (SUM (DECODE (cm_mc_code, '09', NVL (cm_lc_amount, 0))), 0)
-             personal_accident,
-         NVL (SUM (DECODE (cm_mc_code, '10', NVL (cm_lc_amount, 0))), 0)
-             theft,
+            personal_accident,
+         NVL (SUM (DECODE (cm_mc_code, '10', NVL (cm_lc_amount, 0))), 0) theft,
          NVL (SUM (DECODE (cm_mc_code, '11', NVL (cm_lc_amount, 0))), 0)
-             workmens_compensation,
+            workmens_compensation,
          NVL (SUM (DECODE (cm_mc_code, '12', NVL (cm_lc_amount, 0))), 0)
-             miscellaneous,
-         NVL (SUM (NVL (cm_lc_amount, 0)), 0)
-             total
+            miscellaneous,
+         NVL (SUM (NVL (cm_lc_amount, 0)), 0) total
     FROM CM_CLAIMS_EXPERIENCE_OFFICE
-   WHERE     cm_org_code = :p_org_code
-         AND cm_os_code = NVL ( :p_os_code, cm_os_code)
+   WHERE cm_org_code = :p_org_code
+         and cm_os_code = NVL(:p_os_code,cm_os_code)
          AND cm_order_no IN (4)
-         AND cm_year = :p_to_dt
-GROUP BY cm_order_no, cm_org_code
+         AND cm_year = TO_CHAR (:p_to_dt, 'yyyy')
+GROUP BY cm_order_no,
+         cm_org_code
 UNION
-  SELECT 9               cm_order_no,
+  SELECT 9 cm_order_no,
          cm_org_code,
          ROUND (
-               ((  NVL (
+            ( (NVL (
+                  SUM (
+                     DECODE (
+                        cm_mc_code,
+                        '01', DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0)))),
+                  0)
+               / NULLIF (
+                    NVL (
                        SUM (
-                           DECODE (
+                          DECODE (
+                             cm_mc_code,
+                             '01', DECODE (cm_order_no,
+                                           1, NVL (cm_lc_amount, 0)))),
+                       0),
+                    0)))
+            * 100)
+            aviation,
+         ROUND (
+            ( (NVL (
+                  SUM (
+                     DECODE (
+                        cm_mc_code,
+                        '02', DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0)))),
+                  0)
+               / NULLIF (
+                    NVL (
+                       SUM (
+                          DECODE (
+                             cm_mc_code,
+                             '02', DECODE (cm_order_no,
+                                           1, NVL (cm_lc_amount, 0)))),
+                       0),
+                    0)))
+            * 100)
+            engineering,
+         ROUND (
+            ( (NVL (
+                  SUM (
+                     DECODE (
+                        cm_mc_code,
+                        '03', DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0)))),
+                  0)
+               / NULLIF (
+                    NVL (
+                       SUM (
+                          DECODE (
+                             cm_mc_code,
+                             '03', DECODE (cm_order_no,
+                                           1, NVL (cm_lc_amount, 0)))),
+                       0),
+                    0)))
+            * 100)
+            fire_domestic,
+         ROUND (
+            ( (NVL (
+                  SUM (
+                     DECODE (
+                        cm_mc_code,
+                        '04', DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0)))),
+                  0)
+               / NULLIF (
+                    NVL (
+                       SUM (
+                          DECODE (
+                             cm_mc_code,
+                             '04', DECODE (cm_order_no,
+                                           1, NVL (cm_lc_amount, 0)))),
+                       0),
+                    0)))
+            * 100)
+            fire_industrial,
+         ROUND (
+            ( (NVL (
+                  SUM (
+                     DECODE (
+                        cm_mc_code,
+                        '05', DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0)))),
+                  0)
+               / NULLIF (
+                    NVL (
+                       SUM (
+                          DECODE (
+                             cm_mc_code,
+                             '05', DECODE (cm_order_no,
+                                           1, NVL (cm_lc_amount, 0)))),
+                       0),
+                    0)))
+            * 100)
+            public_liability,
+         ROUND (
+            ( (NVL (
+                  SUM (
+                     DECODE (
+                        cm_mc_code,
+                        '06', DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0)))),
+                  0)
+               / NULLIF (
+                    NVL (
+                       SUM (
+                          DECODE (
+                             cm_mc_code,
+                             '06', DECODE (cm_order_no,
+                                           1, NVL (cm_lc_amount, 0)))),
+                       0),
+                    0)))
+            * 100)
+            marine,
+         ROUND (
+            ( (NVL (
+                  SUM (
+                     DECODE (
+                        cm_mc_code,
+                        '070', DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0)))),
+                  0)
+               / NULLIF (
+                    NVL (
+                       SUM (
+                          DECODE (
+                             cm_mc_code,
+                             '070', DECODE (cm_order_no,
+                                            1, NVL (cm_lc_amount, 0)))),
+                       0),
+                    0)))
+            * 100)
+            motor_private,
+         ROUND (
+            ( (NVL (
+                  SUM (
+                     DECODE (
+                        cm_mc_code,
+                        '080', DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0)))),
+                  0)
+               / NULLIF (
+                    NVL (
+                       SUM (
+                          DECODE (
+                             cm_mc_code,
+                             '080', DECODE (cm_order_no,
+                                            1, NVL (cm_lc_amount, 0)))),
+                       0),
+                    0)))
+            * 100)
+            motor_commercial,
+         ROUND (
+            ( (NVL (
+                  SUM (
+                     DECODE (
+                        cm_mc_code,
+                        '09', DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0)))),
+                  0)
+               / NULLIF (
+                    NVL (
+                       SUM (
+                          DECODE (
+                             cm_mc_code,
+                             '09', DECODE (cm_order_no,
+                                           1, NVL (cm_lc_amount, 0)))),
+                       0),
+                    0)))
+            * 100)
+            personal_accident,
+         ROUND (
+            ( (NVL (
+                  SUM (
+                     DECODE (
+                        cm_mc_code,
+                        '10', DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0)))),
+                  0)
+               / NULLIF (
+                    NVL (
+                       SUM (
+                          DECODE (
+                             cm_mc_code,
+                             '10', DECODE (cm_order_no,
+                                           1, NVL (cm_lc_amount, 0)))),
+                       0),
+                    0)))
+            * 100)
+            theft,
+         ROUND (
+            ( (NVL (
+                  SUM (
+                     DECODE (
+                        cm_mc_code,
+                        '11', DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0)))),
+                  0)
+               / NULLIF (
+                    NVL (
+                       SUM (
+                          DECODE (
+                             cm_mc_code,
+                             '11', DECODE (cm_order_no,
+                                           1, NVL (cm_lc_amount, 0)))),
+                       0),
+                    0)))
+            * 100)
+            workmens_compensation,
+         ROUND (
+            ( (NVL (
+                  SUM (
+                     DECODE (
+                        cm_mc_code,
+                        '12', DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0)))),
+                  0)
+               / NULLIF (
+                    NVL (
+                       SUM (
+                          DECODE (
+                             cm_mc_code,
+                             '12', DECODE (cm_order_no,
+                                           1, NVL (cm_lc_amount, 0)))),
+                       0),
+                    0)))
+            * 100)
+            miscellaneous,
+         ROUND (
+            ( (NVL (SUM (DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0))), 0)
+               / NULLIF (
+                    NVL (SUM (DECODE (cm_order_no, 1, NVL (cm_lc_amount, 0))),
+                         0),
+                    0))
+             * 100))
+            total
+    FROM CM_CLAIMS_EXPERIENCE_OFFICE
+   WHERE cm_org_code = :p_org_code
+         and cm_os_code = NVL(:p_os_code,cm_os_code)
+         AND cm_year BETWEEN TO_CHAR (:p_fm_dt, 'yyyy')
+                         AND TO_CHAR (:p_to_dt, 'yyyy')
+         AND cm_order_no IN (1, 8)
+GROUP BY 9,
+         cm_org_code
+UNION
+  SELECT 10 cm_order_no,
+         cm_org_code,
+         100
+         - ROUND (
+              ( (NVL (
+                    SUM (
+                       DECODE (
+                          cm_mc_code,
+                          '01', DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0)))),
+                    0)
+                 / NULLIF (
+                      NVL (
+                         SUM (
+                            DECODE (
                                cm_mc_code,
                                '01', DECODE (cm_order_no,
-                                             8, NVL (cm_lc_amount, 0)))),
-                       0)
+                                             1, NVL (cm_lc_amount, 0)))),
+                         0),
+                      0)))
+              * 100)
+            aviation,
+         100
+         - ROUND (
+              ( (NVL (
+                    SUM (
+                       DECODE (
+                          cm_mc_code,
+                          '02', DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0)))),
+                    0)
                  / NULLIF (
-                       NVL (
-                           SUM (
-                               DECODE (
-                                   cm_mc_code,
-                                   '01', DECODE (cm_order_no,
-                                                 1, NVL (cm_lc_amount, 0)))),
-                           0),
-                       0)))
-             * 100)      aviation,
-         ROUND (
-               ((  NVL (
-                       SUM (
-                           DECODE (
+                      NVL (
+                         SUM (
+                            DECODE (
                                cm_mc_code,
                                '02', DECODE (cm_order_no,
-                                             8, NVL (cm_lc_amount, 0)))),
-                       0)
+                                             1, NVL (cm_lc_amount, 0)))),
+                         0),
+                      0)))
+              * 100)
+            engineering,
+         100
+         - ROUND (
+              ( (NVL (
+                    SUM (
+                       DECODE (
+                          cm_mc_code,
+                          '03', DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0)))),
+                    0)
                  / NULLIF (
-                       NVL (
-                           SUM (
-                               DECODE (
-                                   cm_mc_code,
-                                   '02', DECODE (cm_order_no,
-                                                 1, NVL (cm_lc_amount, 0)))),
-                           0),
-                       0)))
-             * 100)      engineering,
-         ROUND (
-               ((  NVL (
-                       SUM (
-                           DECODE (
+                      NVL (
+                         SUM (
+                            DECODE (
                                cm_mc_code,
                                '03', DECODE (cm_order_no,
-                                             8, NVL (cm_lc_amount, 0)))),
-                       0)
+                                             1, NVL (cm_lc_amount, 0)))),
+                         0),
+                      0)))
+              * 100)
+            fire_domestic,
+         100
+         - ROUND (
+              ( (NVL (
+                    SUM (
+                       DECODE (
+                          cm_mc_code,
+                          '04', DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0)))),
+                    0)
                  / NULLIF (
-                       NVL (
-                           SUM (
-                               DECODE (
-                                   cm_mc_code,
-                                   '03', DECODE (cm_order_no,
-                                                 1, NVL (cm_lc_amount, 0)))),
-                           0),
-                       0)))
-             * 100)      fire_domestic,
-         ROUND (
-               ((  NVL (
-                       SUM (
-                           DECODE (
+                      NVL (
+                         SUM (
+                            DECODE (
                                cm_mc_code,
                                '04', DECODE (cm_order_no,
-                                             8, NVL (cm_lc_amount, 0)))),
-                       0)
+                                             1, NVL (cm_lc_amount, 0)))),
+                         0),
+                      0)))
+              * 100)
+            fire_industrial,
+         100
+         - ROUND (
+              ( (NVL (
+                    SUM (
+                       DECODE (
+                          cm_mc_code,
+                          '05', DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0)))),
+                    0)
                  / NULLIF (
-                       NVL (
-                           SUM (
-                               DECODE (
-                                   cm_mc_code,
-                                   '04', DECODE (cm_order_no,
-                                                 1, NVL (cm_lc_amount, 0)))),
-                           0),
-                       0)))
-             * 100)      fire_industrial,
-         ROUND (
-               ((  NVL (
-                       SUM (
-                           DECODE (
+                      NVL (
+                         SUM (
+                            DECODE (
                                cm_mc_code,
                                '05', DECODE (cm_order_no,
-                                             8, NVL (cm_lc_amount, 0)))),
-                       0)
+                                             1, NVL (cm_lc_amount, 0)))),
+                         0),
+                      0)))
+              * 100)
+            public_liability,
+         100
+         - ROUND (
+              ( (NVL (
+                    SUM (
+                       DECODE (
+                          cm_mc_code,
+                          '06', DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0)))),
+                    0)
                  / NULLIF (
-                       NVL (
-                           SUM (
-                               DECODE (
-                                   cm_mc_code,
-                                   '05', DECODE (cm_order_no,
-                                                 1, NVL (cm_lc_amount, 0)))),
-                           0),
-                       0)))
-             * 100)      public_liability,
-         ROUND (
-               ((  NVL (
-                       SUM (
-                           DECODE (
+                      NVL (
+                         SUM (
+                            DECODE (
                                cm_mc_code,
                                '06', DECODE (cm_order_no,
-                                             8, NVL (cm_lc_amount, 0)))),
-                       0)
+                                             1, NVL (cm_lc_amount, 0)))),
+                         0),
+                      0)))
+              * 100)
+            marine,
+         100
+         - ROUND (
+              ( (NVL (
+                    SUM (
+                       DECODE (
+                          cm_mc_code,
+                          '070', DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0)))),
+                    0)
                  / NULLIF (
-                       NVL (
-                           SUM (
-                               DECODE (
-                                   cm_mc_code,
-                                   '06', DECODE (cm_order_no,
-                                                 1, NVL (cm_lc_amount, 0)))),
-                           0),
-                       0)))
-             * 100)      marine,
-         ROUND (
-               ((  NVL (
-                       SUM (
-                           DECODE (
+                      NVL (
+                         SUM (
+                            DECODE (
                                cm_mc_code,
                                '070', DECODE (cm_order_no,
-                                              8, NVL (cm_lc_amount, 0)))),
-                       0)
+                                              1, NVL (cm_lc_amount, 0)))),
+                         0),
+                      0)))
+              * 100)
+            motor_private,
+         100
+         - ROUND (
+              ( (NVL (
+                    SUM (
+                       DECODE (
+                          cm_mc_code,
+                          '080', DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0)))),
+                    0)
                  / NULLIF (
-                       NVL (
-                           SUM (
-                               DECODE (
-                                   cm_mc_code,
-                                   '070', DECODE (cm_order_no,
-                                                  1, NVL (cm_lc_amount, 0)))),
-                           0),
-                       0)))
-             * 100)      motor_private,
-         ROUND (
-               ((  NVL (
-                       SUM (
-                           DECODE (
+                      NVL (
+                         SUM (
+                            DECODE (
                                cm_mc_code,
                                '080', DECODE (cm_order_no,
-                                              8, NVL (cm_lc_amount, 0)))),
-                       0)
+                                              1, NVL (cm_lc_amount, 0)))),
+                         0),
+                      0)))
+              * 100)
+            motor_commercial,
+         100
+         - ROUND (
+              ( (NVL (
+                    SUM (
+                       DECODE (
+                          cm_mc_code,
+                          '09', DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0)))),
+                    0)
                  / NULLIF (
-                       NVL (
-                           SUM (
-                               DECODE (
-                                   cm_mc_code,
-                                   '080', DECODE (cm_order_no,
-                                                  1, NVL (cm_lc_amount, 0)))),
-                           0),
-                       0)))
-             * 100)      motor_commercial,
-         ROUND (
-               ((  NVL (
-                       SUM (
-                           DECODE (
+                      NVL (
+                         SUM (
+                            DECODE (
                                cm_mc_code,
                                '09', DECODE (cm_order_no,
-                                             8, NVL (cm_lc_amount, 0)))),
-                       0)
+                                             1, NVL (cm_lc_amount, 0)))),
+                         0),
+                      0)))
+              * 100)
+            personal_accident,
+         100
+         - ROUND (
+              ( (NVL (
+                    SUM (
+                       DECODE (
+                          cm_mc_code,
+                          '10', DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0)))),
+                    0)
                  / NULLIF (
-                       NVL (
-                           SUM (
-                               DECODE (
-                                   cm_mc_code,
-                                   '09', DECODE (cm_order_no,
-                                                 1, NVL (cm_lc_amount, 0)))),
-                           0),
-                       0)))
-             * 100)      personal_accident,
-         ROUND (
-               ((  NVL (
-                       SUM (
-                           DECODE (
+                      NVL (
+                         SUM (
+                            DECODE (
                                cm_mc_code,
                                '10', DECODE (cm_order_no,
-                                             8, NVL (cm_lc_amount, 0)))),
-                       0)
+                                             1, NVL (cm_lc_amount, 0)))),
+                         0),
+                      0)))
+              * 100)
+            theft,
+         100
+         - ROUND (
+              ( (NVL (
+                    SUM (
+                       DECODE (
+                          cm_mc_code,
+                          '11', DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0)))),
+                    0)
                  / NULLIF (
-                       NVL (
-                           SUM (
-                               DECODE (
-                                   cm_mc_code,
-                                   '10', DECODE (cm_order_no,
-                                                 1, NVL (cm_lc_amount, 0)))),
-                           0),
-                       0)))
-             * 100)      theft,
-         ROUND (
-               ((  NVL (
-                       SUM (
-                           DECODE (
+                      NVL (
+                         SUM (
+                            DECODE (
                                cm_mc_code,
                                '11', DECODE (cm_order_no,
-                                             8, NVL (cm_lc_amount, 0)))),
-                       0)
+                                             1, NVL (cm_lc_amount, 0)))),
+                         0),
+                      0)))
+              * 100)
+            workmens_compensation,
+         100
+         - ROUND (
+              ( (NVL (
+                    SUM (
+                       DECODE (
+                          cm_mc_code,
+                          '12', DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0)))),
+                    0)
                  / NULLIF (
-                       NVL (
-                           SUM (
-                               DECODE (
-                                   cm_mc_code,
-                                   '11', DECODE (cm_order_no,
-                                                 1, NVL (cm_lc_amount, 0)))),
-                           0),
-                       0)))
-             * 100)      workmens_compensation,
-         ROUND (
-               ((  NVL (
-                       SUM (
-                           DECODE (
+                      NVL (
+                         SUM (
+                            DECODE (
                                cm_mc_code,
                                '12', DECODE (cm_order_no,
-                                             8, NVL (cm_lc_amount, 0)))),
-                       0)
+                                             1, NVL (cm_lc_amount, 0)))),
+                         0),
+                      0)))
+              * 100)
+            miscellaneous,
+         100
+         - ROUND (
+              ( (NVL (SUM (DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0))), 0)
                  / NULLIF (
-                       NVL (
-                           SUM (
-                               DECODE (
-                                   cm_mc_code,
-                                   '12', DECODE (cm_order_no,
-                                                 1, NVL (cm_lc_amount, 0)))),
-                           0),
-                       0)))
-             * 100)      miscellaneous,
-         ROUND (
-             (  (  NVL (SUM (DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0))),
-                        0)
-                 / NULLIF (
-                       NVL (
-                           SUM (DECODE (cm_order_no, 1, NVL (cm_lc_amount, 0))),
-                           0),
-                       0))
-              * 100))    total
+                      NVL (
+                         SUM (DECODE (cm_order_no, 1, NVL (cm_lc_amount, 0))),
+                         0),
+                      0))
+               * 100))
+            total
     FROM CM_CLAIMS_EXPERIENCE_OFFICE
-   WHERE     cm_org_code = :p_org_code
-         AND cm_os_code = NVL ( :p_os_code, cm_os_code)
-         AND cm_year BETWEEN :p_fm_dt AND :p_to_dt
+   WHERE cm_org_code = :p_org_code
+         and cm_os_code = NVL(:p_os_code,cm_os_code)
+         AND cm_year BETWEEN TO_CHAR (:p_fm_dt, 'yyyy')
+                         AND TO_CHAR (:p_to_dt, 'yyyy')
          AND cm_order_no IN (1, 8)
-GROUP BY 9, cm_org_code
-UNION
-  SELECT 10                cm_order_no,
-         cm_org_code,
-           100
-         - ROUND (
-                 ((  NVL (
-                         SUM (
-                             DECODE (
-                                 cm_mc_code,
-                                 '01', DECODE (cm_order_no,
-                                               8, NVL (cm_lc_amount, 0)))),
-                         0)
-                   / NULLIF (
-                         NVL (
-                             SUM (
-                                 DECODE (
-                                     cm_mc_code,
-                                     '01', DECODE (cm_order_no,
-                                                   1, NVL (cm_lc_amount, 0)))),
-                             0),
-                         0)))
-               * 100)      aviation,
-           100
-         - ROUND (
-                 ((  NVL (
-                         SUM (
-                             DECODE (
-                                 cm_mc_code,
-                                 '02', DECODE (cm_order_no,
-                                               8, NVL (cm_lc_amount, 0)))),
-                         0)
-                   / NULLIF (
-                         NVL (
-                             SUM (
-                                 DECODE (
-                                     cm_mc_code,
-                                     '02', DECODE (cm_order_no,
-                                                   1, NVL (cm_lc_amount, 0)))),
-                             0),
-                         0)))
-               * 100)      engineering,
-           100
-         - ROUND (
-                 ((  NVL (
-                         SUM (
-                             DECODE (
-                                 cm_mc_code,
-                                 '03', DECODE (cm_order_no,
-                                               8, NVL (cm_lc_amount, 0)))),
-                         0)
-                   / NULLIF (
-                         NVL (
-                             SUM (
-                                 DECODE (
-                                     cm_mc_code,
-                                     '03', DECODE (cm_order_no,
-                                                   1, NVL (cm_lc_amount, 0)))),
-                             0),
-                         0)))
-               * 100)      fire_domestic,
-           100
-         - ROUND (
-                 ((  NVL (
-                         SUM (
-                             DECODE (
-                                 cm_mc_code,
-                                 '04', DECODE (cm_order_no,
-                                               8, NVL (cm_lc_amount, 0)))),
-                         0)
-                   / NULLIF (
-                         NVL (
-                             SUM (
-                                 DECODE (
-                                     cm_mc_code,
-                                     '04', DECODE (cm_order_no,
-                                                   1, NVL (cm_lc_amount, 0)))),
-                             0),
-                         0)))
-               * 100)      fire_industrial,
-           100
-         - ROUND (
-                 ((  NVL (
-                         SUM (
-                             DECODE (
-                                 cm_mc_code,
-                                 '05', DECODE (cm_order_no,
-                                               8, NVL (cm_lc_amount, 0)))),
-                         0)
-                   / NULLIF (
-                         NVL (
-                             SUM (
-                                 DECODE (
-                                     cm_mc_code,
-                                     '05', DECODE (cm_order_no,
-                                                   1, NVL (cm_lc_amount, 0)))),
-                             0),
-                         0)))
-               * 100)      public_liability,
-           100
-         - ROUND (
-                 ((  NVL (
-                         SUM (
-                             DECODE (
-                                 cm_mc_code,
-                                 '06', DECODE (cm_order_no,
-                                               8, NVL (cm_lc_amount, 0)))),
-                         0)
-                   / NULLIF (
-                         NVL (
-                             SUM (
-                                 DECODE (
-                                     cm_mc_code,
-                                     '06', DECODE (cm_order_no,
-                                                   1, NVL (cm_lc_amount, 0)))),
-                             0),
-                         0)))
-               * 100)      marine,
-           100
-         - ROUND (
-                 ((  NVL (
-                         SUM (
-                             DECODE (
-                                 cm_mc_code,
-                                 '070', DECODE (cm_order_no,
-                                                8, NVL (cm_lc_amount, 0)))),
-                         0)
-                   / NULLIF (
-                         NVL (
-                             SUM (
-                                 DECODE (
-                                     cm_mc_code,
-                                     '070', DECODE (cm_order_no,
-                                                    1, NVL (cm_lc_amount, 0)))),
-                             0),
-                         0)))
-               * 100)      motor_private,
-           100
-         - ROUND (
-                 ((  NVL (
-                         SUM (
-                             DECODE (
-                                 cm_mc_code,
-                                 '080', DECODE (cm_order_no,
-                                                8, NVL (cm_lc_amount, 0)))),
-                         0)
-                   / NULLIF (
-                         NVL (
-                             SUM (
-                                 DECODE (
-                                     cm_mc_code,
-                                     '080', DECODE (cm_order_no,
-                                                    1, NVL (cm_lc_amount, 0)))),
-                             0),
-                         0)))
-               * 100)      motor_commercial,
-           100
-         - ROUND (
-                 ((  NVL (
-                         SUM (
-                             DECODE (
-                                 cm_mc_code,
-                                 '09', DECODE (cm_order_no,
-                                               8, NVL (cm_lc_amount, 0)))),
-                         0)
-                   / NULLIF (
-                         NVL (
-                             SUM (
-                                 DECODE (
-                                     cm_mc_code,
-                                     '09', DECODE (cm_order_no,
-                                                   1, NVL (cm_lc_amount, 0)))),
-                             0),
-                         0)))
-               * 100)      personal_accident,
-           100
-         - ROUND (
-                 ((  NVL (
-                         SUM (
-                             DECODE (
-                                 cm_mc_code,
-                                 '10', DECODE (cm_order_no,
-                                               8, NVL (cm_lc_amount, 0)))),
-                         0)
-                   / NULLIF (
-                         NVL (
-                             SUM (
-                                 DECODE (
-                                     cm_mc_code,
-                                     '10', DECODE (cm_order_no,
-                                                   1, NVL (cm_lc_amount, 0)))),
-                             0),
-                         0)))
-               * 100)      theft,
-           100
-         - ROUND (
-                 ((  NVL (
-                         SUM (
-                             DECODE (
-                                 cm_mc_code,
-                                 '11', DECODE (cm_order_no,
-                                               8, NVL (cm_lc_amount, 0)))),
-                         0)
-                   / NULLIF (
-                         NVL (
-                             SUM (
-                                 DECODE (
-                                     cm_mc_code,
-                                     '11', DECODE (cm_order_no,
-                                                   1, NVL (cm_lc_amount, 0)))),
-                             0),
-                         0)))
-               * 100)      workmens_compensation,
-           100
-         - ROUND (
-                 ((  NVL (
-                         SUM (
-                             DECODE (
-                                 cm_mc_code,
-                                 '12', DECODE (cm_order_no,
-                                               8, NVL (cm_lc_amount, 0)))),
-                         0)
-                   / NULLIF (
-                         NVL (
-                             SUM (
-                                 DECODE (
-                                     cm_mc_code,
-                                     '12', DECODE (cm_order_no,
-                                                   1, NVL (cm_lc_amount, 0)))),
-                             0),
-                         0)))
-               * 100)      miscellaneous,
-           100
-         - ROUND (
-               (  (  NVL (SUM (DECODE (cm_order_no, 8, NVL (cm_lc_amount, 0))),
-                          0)
-                   / NULLIF (
-                         NVL (
-                             SUM (
-                                 DECODE (cm_order_no, 1, NVL (cm_lc_amount, 0))),
-                             0),
-                         0))
-                * 100))    total
-    FROM CM_CLAIMS_EXPERIENCE_OFFICE
-   WHERE     cm_org_code = :p_org_code
-         AND cm_os_code = NVL ( :p_os_code, cm_os_code)
-         AND cm_year BETWEEN :p_fm_dt AND :p_to_dt
-         AND cm_order_no IN (1, 8)
-GROUP BY 10, cm_org_code
+GROUP BY 10,
+         cm_org_code
 ORDER BY cm_order_no
       `;
+
+      const _fromDate = new Date(fromDate);
+      const _toDate = new Date(toDate);
 
       // Execute the query with parameters
       results = (await connection).execute(query, {
         p_org_code: "50",
-        p_fm_dt: fromDate,
-        p_to_dt: toDate,
+        p_fm_dt: _fromDate,
+        p_to_dt: _toDate,
         p_os_code: branchCode,
       });
 
       const formattedData = (await results).rows?.map((row: any) => ({
         cm_order_no: row[0],
         total: row[14],
+      }));
+
+      return res.status(200).json({ result: formattedData });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: "Internal server error" });
+    } finally {
+      try {
+        if (connection) {
+          (await connection).close();
+          console.info("Connection closed successfully");
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  }
+  async getRIpaidCessionSum(req: Request, res: Response) {
+    let connection;
+    let results;
+    try {
+      const fromDate: string | any = req.query.fromDate;
+      const toDate: string | any = req.query.toDate;
+      const branchCode: string | any = req.query.branchCode;
+      connection = (await pool).getConnection();
+      console.log("connected to database");
+
+      // Construct SQL query with conditional parameter inclusion
+      let query = `
+        SELECT bh_org_code,
+         bh_mc_code,
+         UPPER (pkg_system_admin.get_class_name (bh_org_code, bh_mc_code))
+             class,
+         SUM (NVL (j.lc_amount, 0))
+             paid_amount,
+         SUM (
+               NVL (
+                   ROUND (
+                       (  NVL (j.lc_amount, 0)
+                        * DECODE (retention_perc_null,
+                                  NULL, r.retention_perc,
+                                  h.retention_perc)
+                        / 100)),
+                   0)
+             - pkg_cm.get_cm_paid_ri_amount ( :p_org_code,
+                                             cm_index,
+                                             hd_no,
+                                             NULL,
+                                             NULL,
+                                             'XOL',
+                                             'XOL',
+                                             :p_fm_dt,
+                                             :p_to_dt,
+                                             'LC',
+                                             2))
+             retention_amnt,
+         SUM (CASE
+                  WHEN (pr_end_code NOT IN ('20003', '20004'))
+                  THEN
+                        NVL (pkg_cm.get_cm_paid_ri_amount ( :p_org_code,
+                                                           cm_index,
+                                                           hd_no,
+                                                           cr_ri_batch_no,
+                                                           cr_ri_cr_index,
+                                                           'CQS',
+                                                           'CQS',
+                                                           :p_fm_dt,
+                                                           :p_to_dt,
+                                                           'LC',
+                                                           2),
+                             0)
+                      + NVL (pkg_cm.get_cm_paid_ri_amount ( :p_org_code,
+                                                           cm_index,
+                                                           hd_no,
+                                                           cr_ri_batch_no,
+                                                           cr_ri_cr_index,
+                                                           'SURPLUS',
+                                                           'Surplus 1',
+                                                           :p_fm_dt,
+                                                           :p_to_dt,
+                                                           'LC',
+                                                           2),
+                             0)
+                      + NVL (pkg_cm.get_cm_paid_ri_amount ( :p_org_code,
+                                                           cm_index,
+                                                           hd_no,
+                                                           cr_ri_batch_no,
+                                                           cr_ri_cr_index,
+                                                           'SURPLUS',
+                                                           'Surplus 2',
+                                                           :p_fm_dt,
+                                                           :p_to_dt,
+                                                           'LC',
+                                                           2),
+                             0)
+                      + NVL (pkg_cm.get_cm_paid_ri_amount ( :p_org_code,
+                                                           cm_index,
+                                                           hd_no,
+                                                           cr_ri_batch_no,
+                                                           cr_ri_cr_index,
+                                                           'QS',
+                                                           'QS',
+                                                           :p_fm_dt,
+                                                           :p_to_dt,
+                                                           'LC',
+                                                           2),
+                             0)
+                  ELSE
+                      0
+              END)
+             treaty_amt,
+         SUM (CASE
+                  WHEN (pr_end_code IN ('20003', '20004'))
+                  THEN
+                        NVL (pkg_cm.get_cm_paid_ri_amount ( :p_org_code,
+                                                           cm_index,
+                                                           hd_no,
+                                                           cr_ri_batch_no,
+                                                           cr_ri_cr_index,
+                                                           'CQS',
+                                                           'CQS',
+                                                           :p_fm_dt,
+                                                           :p_to_dt,
+                                                           'LC',
+                                                           2),
+                             0)
+                      + NVL (pkg_cm.get_cm_paid_ri_amount ( :p_org_code,
+                                                           cm_index,
+                                                           hd_no,
+                                                           cr_ri_batch_no,
+                                                           cr_ri_cr_index,
+                                                           'SURPLUS',
+                                                           'Surplus 1',
+                                                           :p_fm_dt,
+                                                           :p_to_dt,
+                                                           'LC',
+                                                           2),
+                             0)
+                      + NVL (pkg_cm.get_cm_paid_ri_amount ( :p_org_code,
+                                                           cm_index,
+                                                           hd_no,
+                                                           cr_ri_batch_no,
+                                                           cr_ri_cr_index,
+                                                           'SURPLUS',
+                                                           'Surplus 2',
+                                                           :p_fm_dt,
+                                                           :p_to_dt,
+                                                           'LC',
+                                                           2),
+                             0)
+                      + NVL (pkg_cm.get_cm_paid_ri_amount ( :p_org_code,
+                                                           cm_index,
+                                                           hd_no,
+                                                           cr_ri_batch_no,
+                                                           cr_ri_cr_index,
+                                                           'QS',
+                                                           'QS',
+                                                           :p_fm_dt,
+                                                           :p_to_dt,
+                                                           'LC',
+                                                           2),
+                             0)
+                  ELSE
+                      0
+              END)
+             commesa_amt,
+         SUM (NVL (pkg_cm.get_cm_paid_ri_amount ( :p_org_code,
+                                                 cm_index,
+                                                 hd_no,
+                                                 cr_ri_batch_no,
+                                                 cr_ri_cr_index,
+                                                 'FAC OUT',
+                                                 'FAC Out',
+                                                 :p_fm_dt,
+                                                 :p_to_dt,
+                                                 'LC',
+                                                 2),
+                   0))
+             fac_amt,
+         SUM (NVL (pkg_cm.get_cm_paid_ri_amount ( :p_org_code,
+                                                 cm_index,
+                                                 hd_no,
+                                                 NULL,
+                                                 NULL,
+                                                 'XOL',
+                                                 'XOL',
+                                                 :p_fm_dt,
+                                                 :p_to_dt,
+                                                 'LC',
+                                                 2),
+                   0))
+             xol_amnt
+    FROM cm_payments_vw     j,
+         uh_policy          x,
+         ri_batch_header    bh,
+         vw_premium_register prem,
+         (  SELECT DISTINCT
+                   rs_org_code,
+                   rs_ri_batch_no,
+                   rs_ri_cr_index,
+                   rs_trt_code,
+                   NVL (SUM (DECODE (rs_line_type_int, 'Retention', rs_percent)),
+                        0)
+                       retention_perc,
+                   SUM (DECODE (rs_line_type_int, 'Retention', rs_percent))
+                       retention_perc_null,
+                   NVL (SUM (DECODE (rs_line_type_int, 'Surplus 1', rs_percent)),
+                        0)
+                       surp1_perc,
+                   NVL (SUM (DECODE (rs_line_type_int, 'Surplus 2', rs_percent)),
+                        0)
+                       surp2_perc,
+                   NVL (SUM (DECODE (rs_line_type_int, 'QS', rs_percent)), 0)
+                       qs_perc,
+                   NVL (SUM (DECODE (rs_line_type_int, 'CQS', rs_percent)), 0)
+                       cqs_perc,
+                   NVL (SUM (DECODE (rs_line_type_int, 'FAC Out', rs_percent)),
+                        0)
+                       facout_perc,
+                   0
+                       xol_perc,
+                   NVL (SUM (DECODE ( :p_currency, NULL, rs_lc_si, rs_fc_si)), 0)
+                       si,
+                   NVL (SUM (DECODE (rs_line_type_int, 'Retention', rs_lc_si)),
+                        0)
+                       retention_si,
+                   NVL (SUM (DECODE (rs_line_type_int, 'Surplus 1', rs_lc_si)),
+                        0)
+                       surp1_si,
+                   NVL (SUM (DECODE (rs_line_type_int, 'Surplus 2', rs_lc_si)),
+                        0)
+                       surp2_si,
+                   NVL (SUM (DECODE (rs_line_type_int, 'QS', rs_lc_si)), 0)
+                       qs_si,
+                   NVL (SUM (DECODE (rs_line_type_int, 'CQS', rs_lc_si)), 0)
+                       cqs_si,
+                   NVL (SUM (DECODE (rs_line_type_int, 'FAC Out', rs_lc_si)), 0)
+                       facout_si,
+                   0
+                       xol_si
+              FROM uw_policy_ri_shares
+             WHERE rs_type = 'Final' AND rs_line_type_int NOT IN ('Balance')
+          GROUP BY rs_org_code,
+                   rs_ri_batch_no,
+                   rs_ri_cr_index,
+                   rs_trt_code) h,
+         (  SELECT DISTINCT
+                   rh.cm_org_code,
+                   rh.cm_cm_index,
+                   rh.cm_risk_index,
+                   NVL (SUM (DECODE (cm_line_type, 'RETENTION', cm_perc)), 0)    retention_perc
+              FROM cm_claims_ri_header rh, cm_claims_ri_alloc ra
+             WHERE     rh.cm_cm_index = ra.cm_cm_index
+                   AND rh.cm_risk_index = ra.cm_risk_index
+                   AND rh.cm_org_code = ra.cm_org_code
+                   AND cm_line_type = 'RETENTION'
+          GROUP BY rh.cm_org_code, rh.cm_cm_index, rh.cm_risk_index) r
+   WHERE     hd_org_code = :p_org_code
+         AND j.hd_org_code = x.pl_org_code
+         AND j.cm_pl_index = x.pl_index
+         AND j.cm_end_index = x.pl_end_index
+         AND x.pl_index = prem.pr_pl_index
+         AND x.pl_end_index = prem.pr_end_index
+         AND j.cr_ri_batch_no = bh.bh_batch_no(+)
+         AND j.hd_org_code = h.rs_org_code(+)
+         AND j.cr_ri_batch_no = h.rs_ri_batch_no(+)
+         AND j.cr_ri_cr_index = h.rs_ri_cr_index(+)
+         AND j.hd_org_code = r.cm_org_code(+)
+         AND j.cm_index = r.cm_cm_index(+)
+         AND j.cr_risk_index = r.cm_risk_index(+)
+         and j.HD_OS_CODE = nvl(:branchCode,j.HD_OS_CODE)
+         AND TRUNC (hd_gl_date) BETWEEN ( :p_fm_dt) AND ( :p_to_dt)
+GROUP BY bh_org_code, bh_mc_code
+      `;
+
+      // Execute the query with parameters
+      results = (await connection).execute(query, {
+        p_org_code: "50",
+        p_currency: "",
+        p_fm_dt: fromDate,
+        p_to_dt: toDate,
+        branchCode: branchCode,
+      });
+
+      const formattedData = (await results).rows?.map((row: any) => ({
+        treatyAmt: row[5],
+        facAmt: row[7],
+        xolAmt: row[8],
+      }));
+
+      return res.status(200).json({ result: formattedData });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: "Internal server error" });
+    } finally {
+      try {
+        if (connection) {
+          (await connection).close();
+          console.info("Connection closed successfully");
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  }
+  async getRIcessionReport(req: Request, res: Response) {
+    let connection;
+    let results;
+    try {
+      const fromDate: string | any = req.query.fromDate;
+      const toDate: string | any = req.query.toDate;
+      const branchCode: string | any = req.query.branchCode;
+      connection = (await pool).getConnection();
+      console.log("connected to database");
+
+      // Construct SQL query with conditional parameter inclusion
+      let query = `
+        SELECT                                                             --sys_no,
+         ROWNUM,
+         DECODE ( :p_period_catg,
+                 1, 'MONTHLY',
+                 2, 'QUARTERLY',
+                 3, 'SEMI ANNUALLY',
+                 4, 'ANNUALLY')
+             period_type,
+         TO_CHAR (bh_gl_date, 'fmMONTH')
+             cession_month,
+         TO_CHAR (bh_gl_date, 'fmMM')
+             cession_mon,
+         bh_catg_code,
+         bh_catg_name,
+         CASE WHEN a.bh_cv_code = '044' THEN 'EQ' ELSE '.' END
+             cover_sub_catg,
+         bh_gl_date,
+         bh_pol_fm_dt
+             bp_fm_date,
+         bh_pol_to_dt
+             bp_to_date,
+         TO_CHAR (bh_pol_fm_dt, 'yyyy')
+             bp_uw_yr,
+         DECODE ( :p_currency,
+                 NULL, NVL (a.eml_lc_si, 0),
+                 NVL (a.eml_fc_si, 0))
+             perc_100_si,
+         DECODE ( :p_currency,
+                 NULL, NVL (a.eml_lc_prem, 0),
+                 NVL (a.eml_fc_prem, 0))
+             perc_100_prem,
+         DECODE ( :p_currency,
+                 NULL, NVL (a.eml_lc_prem, 0),
+                 NVL (a.eml_fc_prem, 0))
+             eml_prem,
+         DECODE ( :p_currency,
+                 NULL, NVL (a.retention_lc_si, 0),
+                 NVL (a.retention_fc_si, 0))
+             retention_si,
+         DECODE ( :p_currency,
+                 NULL, NVL (a.retention_lc_prem, 0),
+                 NVL (a.retention_fc_prem, 0))
+             retention_prem,
+         DECODE ( :p_currency, NULL, NVL (a.qs_lc_si, 0), NVL (a.qs_fc_si, 0))
+             qs_si,
+         DECODE ( :p_currency,
+                 NULL, NVL (a.qs_lc_prem, 0),
+                 NVL (a.qs_fc_prem, 0))
+             qs_prem,
+         DECODE ( :p_currency,
+                 NULL, NVL (a.qs_lc_comm, 0),
+                 NVL (a.qs_fc_comm, 0))
+             qs_comm,
+         DECODE ( :p_currency,
+                 NULL, NVL (a.qs_lc_premtax, 0),
+                 NVL (a.qs_fc_premtax, 0))
+             qs_premtax,
+         DECODE ( :p_currency,
+                 NULL, NVL (a.cqs_lc_si, 0),
+                 NVL (a.cqs_fc_si, 0))
+             cqs_si,
+         DECODE ( :p_currency,
+                 NULL, NVL (a.cqs_lc_prem, 0),
+                 NVL (a.cqs_fc_prem, 0))
+             cqs_prem,
+         DECODE ( :p_currency,
+                 NULL, NVL (a.cqs_lc_comm, 0),
+                 NVL (a.cqs_fc_comm, 0))
+             cqs_comm,
+         DECODE ( :p_currency,
+                 NULL, NVL (a.surplus1_lc_si, 0),
+                 NVL (a.surplus1_fc_si, 0))
+             surp1_si,
+         DECODE ( :p_currency,
+                 NULL, NVL (a.surplus1_lc_prem, 0),
+                 NVL (a.surplus1_fc_prem, 0))
+             surp1_prem,
+         DECODE ( :p_currency,
+                 NULL, NVL (a.surplus1_lc_comm, 0),
+                 NVL (a.surplus1_fc_comm, 0))
+             surp1_comm,
+         DECODE ( :p_currency,
+                 NULL, NVL (a.surplus1_lc_premtax, 0),
+                 NVL (a.surplus1_fc_premtax, 0))
+             surp1_premtax,
+         DECODE ( :p_currency,
+                 NULL, NVL (a.surplus2_lc_si, 0),
+                 NVL (a.surplus2_fc_si, 0))
+             surp2_si,
+         DECODE ( :p_currency,
+                 NULL, NVL (a.surplus2_lc_prem, 0),
+                 NVL (a.surplus2_fc_prem, 0))
+             surp2_prem,
+         DECODE ( :p_currency,
+                 NULL, NVL (a.surplus2_lc_comm, 0),
+                 NVL (a.surplus2_fc_comm, 0))
+             surp2_comm,
+         DECODE ( :p_currency,
+                 NULL, NVL (a.surplus2_lc_premtax, 0),
+                 NVL (a.surplus2_fc_premtax, 0))
+             surp2_premtax,
+         DECODE ( :p_currency,
+                 NULL, NVL (a.facout_lc_si, 0),
+                 NVL (a.facout_fc_si, 0))
+             facout_si,
+         DECODE ( :p_currency,
+                 NULL, NVL (a.facout_lc_prem, 0),
+                 NVL (a.facout_fc_prem, 0))
+             facout_prem,
+         DECODE ( :p_currency,
+                 NULL, NVL (a.facout_lc_comm, 0),
+                 NVL (a.facout_fc_comm, 0))
+             fac_comm,
+         DECODE ( :p_currency,
+                 NULL, NVL (a.facout_lc_premtax, 0),
+                 NVL (a.facout_fc_premtax, 0))
+             facout_premtax,
+         bh_facout_index,
+         bh_pol_end_index,
+         bh_pol_index,
+         bh_batch_no,
+         bh_cr_index,
+         bh_cv_code
+             cr_cv_code,
+         bh_mc_code
+             cr_mc_code,
+         b.pr_net_effect
+             bh_net_effect,
+         bh_org_code,
+         bh_os_code,
+         b.pr_pr_code
+             bh_pr_code,
+         pkg_uw.get_product_name (b.pr_org_code, b.pr_pr_code)
+             pr_pr_code_xx,
+         bh_pt_code,
+         bh_risk_index,
+         bh_sc_code
+             cr_sc_code,
+         bh_ss_code,
+         UPPER (pkg_system_admin.get_class_name (bh_org_code, bh_mc_code))
+             class,
+            bh_sc_code
+         || ' '
+         || pkg_system_admin.get_subclass_name (bh_org_code, bh_sc_code)
+             sub_class,
+         bh_status,
+         bh_pol_no,
+         bh_pol_end_no,
+         b.pr_int_ent_code
+             broker_code,
+         pkg_system_admin.get_entity_name (b.pr_int_aent_code,
+                                           b.pr_int_ent_code)
+             broker_name,
+         b.pr_assr_ent_code
+             insured_code,
+         pkg_system_admin.get_entity_name (b.pr_assr_aent_code,
+                                           b.pr_assr_ent_code)
+             insured_name,
+         CASE
+             WHEN pr_int_end_code IN ('000') THEN 1
+             WHEN pr_int_end_code IN ('110') THEN 4
+             WHEN pr_net_effect IN ('Credit') THEN 3
+             ELSE 2
+         END
+             pr_end_order,
+         CASE
+             WHEN pr_int_end_code IN ('000') THEN 'New Business'
+             WHEN pr_int_end_code IN ('110') THEN 'Renewals'
+             WHEN pr_net_effect IN ('Credit') THEN 'Refunds'
+             ELSE 'Extras'
+         END
+             pr_end_type,
+         a.bh_risk_catg
+             cr_risk_catg
+    FROM ri_gl_register a, vw_premium_register b
+   WHERE     bh_org_code = :p_org_code
+         AND bh_cur_code = NVL ( :p_currency, bh_cur_code)
+         AND pr_org_code = bh_org_code
+         AND pr_pl_index = bh_pol_index
+         AND pr_end_index = bh_pol_end_index
+         AND bh_mc_code = pr_mc_code(+)
+         AND bh_os_code = NVL ( :branchCode, bh_os_code)
+         AND bh_sc_code = pr_sc_code(+)
+         AND TRUNC (BH_GL_DATE) BETWEEN ( :v_fm_dt) AND ( :v_to_dt)
+ORDER BY bh_gl_date ASC
+      `;
+
+      // Execute the query with parameters
+      results = (await connection).execute(query, {
+        p_org_code: "50",
+        p_currency: "",
+        v_fm_dt: fromDate,
+        v_to_dt: toDate,
+        branchCode: branchCode,
+        p_period_catg: "",
+      });
+
+      const formattedData = (await results).rows?.map((row: any) => ({
+        policyNo: row[54],
+        endNo: row[55],
+        type: row[61],
+        fromDate: row[8],
+        toDate: row[9],
+        insured: row[59],
+        product: row[46],
+        hazard: row[62],
+        "100%(si)": row[11],
+        "100%(prem)": row[12],
+        retentionSi: row[14],
+        retentionPrem: row[15],
+        cqsSi: row[20],
+        cqsPrem: row[21],
+        surp1Si: row[23],
+        surp1Prem: row[24],
+        surp1Comm: row[25],
+        surp2Si: row[27],
+        surp2Prem: row[28],
+        surp2Comm: row[29],
+        qsSi: row[16],
+        qsPrem: row[17],
+        qsComm: row[18],
+        facOutSi: row[31],
+        facOutPrem: row[32],
+        facOutComm: row[33],
+      }));
+
+      return res.status(200).json({ result: formattedData });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: "Internal server error" });
+    } finally {
+      try {
+        if (connection) {
+          (await connection).close();
+          console.info("Connection closed successfully");
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  }
+  async getRiPaidCessionReconReport(req: Request, res: Response) {
+    let connection;
+    let results;
+    try {
+      const fromDate: string | any = req.query.fromDate;
+      const toDate: string | any = req.query.toDate;
+      const branchCode: string | any = req.query.branchCode;
+      connection = (await pool).getConnection();
+      console.log("connected to database");
+
+      // Construct SQL query with conditional parameter inclusion
+      let query = `
+        SELECT org,
+         cm_no,
+         cm_index,
+         cm_end_no,
+         cm_int_date,
+         cm_loss_date,
+         pl_fm_dt,
+         pl_to_dt,
+         cm_pl_no,
+         cm_int_aent_code,
+         cm_int_ent_code,
+         cm_aent_code,
+         cm_ent_code,
+         hd_aent_code,
+         hd_ent_code,
+         cm_insured,
+         cm_loss_desc,
+         SUM (hd_payable_lc_amt)     hd_payable_lc_amt,
+         rs_trt_code,
+         cr_mc_code,
+         cr_sc_code,
+         pl_pr_code,
+         bp_uw_yr,
+         cm_class,
+         cm_sub_class,
+         cm_intermediary,
+         policy_type,
+         product_name,
+         cover_name,
+         SUM (paid_amnt)             paid_amnt,
+         SUM (retention_amnt)        retention_amnt,
+         pl_si                       pl_si,
+         retention_si                retention_si,
+         surp1_si                    surp1_si,
+         surp2_si                    surp2_si,
+         qs_si,
+         cqs_si,
+         facout_si,
+         xol_si,
+         SUM (cqs_amnt)              cqs_amnt,
+         SUM (surp1_amnt)            surp1_amnt,
+         SUM (surp2_amnt)            surp2_amnt,
+         SUM (qs_amnt)               qs_amnt,
+         SUM (facout_amnt)           facout_amnt,
+         SUM (xol_amnt)              xol_amnt,
+         SUM (retention_perc)        retention_perc,
+         SUM (surp1_perc)            surp1_perc,
+         SUM (surp2_perc)            surp2_perc,
+         SUM (qs_perc)               qs_perc,
+         SUM (cqs_perc)              cqs_perc,
+         SUM (facout_perc)           facout_perc,
+         SUM (xol_perc)              xol_perc
+    FROM (  SELECT DISTINCT
+                   j.hd_org_code
+                       org,
+                   j.hd_no,
+                   j.cm_no,
+                   cm_index,
+                   j.cm_end_no,
+                   j.cm_int_date,
+                   j.cm_loss_date,
+                   x.pl_fm_dt,
+                   x.pl_to_dt,
+                   j.cm_pl_no,
+                   j.cm_int_aent_code,
+                   j.cm_int_ent_code,
+                   j.cm_aent_code,
+                   j.cm_ent_code,
+                   j.hd_aent_code,
+                   j.hd_ent_code,
+                   j.cm_insured,
+                   j.hd_payment_mode,
+                   j.hd_mode,
+                   j.hd_payee_name,
+                   j.cm_loss_cause_desc
+                       cm_loss_desc,
+                   j.hd_narration,
+                   j.hd_gl_date,
+                   j.ageing_date,
+                   j.lc_amount
+                       hd_payable_lc_amt,
+                   h.rs_trt_code,
+                   j.cr_mc_code,
+                   j.cr_sc_code,
+                   x.pl_pr_code,
+                   TO_CHAR (bh_pol_fm_dt, 'yyyy')
+                       bp_uw_yr,
+                   j.cm_class,
+                   j.cm_sub_class,
+                   j.cm_intermediary,
+                   pkg_uw.get_product_name ( :p_org_code, x.pl_pr_code)
+                       policy_type,
+                   pkg_uw.get_product_name ( :p_org_code, x.pl_pr_code)
+                       product_name,
+                   pkg_uw.get_cover_name ( :p_org_code, bh_mc_code, bh_cc_code)
+                       cover_name,
+                   NVL (DECODE ( :p_currency, NULL, j.lc_amount, j.fc_amount), 0)
+                       paid_amnt,
+                     NVL (
+                         ROUND (
+                             (  NVL (
+                                    DECODE ( :p_currency,
+                                            NULL, j.lc_amount,
+                                            j.fc_amount),
+                                    0)
+                              * DECODE (retention_perc_null,
+                                        NULL, r.retention_perc,
+                                        h.retention_perc)
+                              / 100)),
+                         0)
+                   - pkg_cm.get_cm_paid_ri_amount (
+                         :p_org_code,
+                         cm_index,
+                         hd_no,
+                         NULL,
+                         NULL,
+                         'XOL',
+                         'XOL',
+                         :p_fm_dt,
+                         :p_to_dt,
+                         DECODE ( :p_currency, NULL, 'LC', 'FC'),
+                         2)
+                       retention_amnt,
+                   NVL (
+                       ((SELECT cr_eml_lc_si
+                           FROM ri_batch_cover_risk
+                          WHERE     cr_org_code = bh_org_code
+                                AND cr_batch_no = bh_batch_no
+                                AND cr_index = cr_ri_cr_index)),
+                       0)
+                       pl_si,
+                   NVL (ROUND (NVL (h.retention_si, 0)), 0)
+                       retention_si,
+                   NVL (ROUND (NVL (h.surp1_si, 0)), 0)
+                       surp1_si,
+                   NVL (ROUND (NVL (h.surp2_si, 0)), 0)
+                       surp2_si,
+                   NVL (ROUND (NVL (h.qs_si, 0)), 0)
+                       qs_si,
+                   NVL (ROUND (NVL (h.cqs_si, 0)), 0)
+                       cqs_si,
+                   NVL (ROUND (NVL (h.facout_si, 0)), 0)
+                       facout_si,
+                   NVL (ROUND (NVL (h.xol_si, 0)), 0)
+                       xol_si,
+                   pkg_cm.get_cm_paid_ri_amount (
+                       :p_org_code,
+                       cm_index,
+                       hd_no,
+                       cr_ri_batch_no,
+                       cr_ri_cr_index,
+                       'CQS',
+                       'CQS',
+                       :p_fm_dt,
+                       :p_to_dt,
+                       DECODE ( :p_currency, NULL, 'LC', 'FC'),
+                       2)
+                       cqs_amnt,
+                   pkg_cm.get_cm_paid_ri_amount (
+                       :p_org_code,
+                       cm_index,
+                       hd_no,
+                       cr_ri_batch_no,
+                       cr_ri_cr_index,
+                       'SURPLUS',
+                       'Surplus 1',
+                       :p_fm_dt,
+                       :p_to_dt,
+                       DECODE ( :p_currency, NULL, 'LC', 'FC'),
+                       2)
+                       surp1_amnt,
+                   pkg_cm.get_cm_paid_ri_amount (
+                       :p_org_code,
+                       cm_index,
+                       hd_no,
+                       cr_ri_batch_no,
+                       cr_ri_cr_index,
+                       'SURPLUS',
+                       'Surplus 2',
+                       :p_fm_dt,
+                       :p_to_dt,
+                       DECODE ( :p_currency, NULL, 'LC', 'FC'),
+                       2)
+                       surp2_amnt,
+                   pkg_cm.get_cm_paid_ri_amount (
+                       :p_org_code,
+                       cm_index,
+                       hd_no,
+                       cr_ri_batch_no,
+                       cr_ri_cr_index,
+                       'QS',
+                       'QS',
+                       :p_fm_dt,
+                       :p_to_dt,
+                       DECODE ( :p_currency, NULL, 'LC', 'FC'),
+                       2)
+                       qs_amnt,
+                   pkg_cm.get_cm_paid_ri_amount (
+                       :p_org_code,
+                       cm_index,
+                       hd_no,
+                       cr_ri_batch_no,
+                       cr_ri_cr_index,
+                       'FAC OUT',
+                       'FAC Out',
+                       :p_fm_dt,
+                       :p_to_dt,
+                       DECODE ( :p_currency, NULL, 'LC', 'FC'),
+                       2)
+                       facout_amnt,
+                   pkg_cm.get_cm_paid_ri_amount (
+                       :p_org_code,
+                       cm_index,
+                       hd_no,
+                       NULL,
+                       NULL,
+                       'XOL',
+                       'XOL',
+                       :p_fm_dt,
+                       :p_to_dt,
+                       DECODE ( :p_currency, NULL, 'LC', 'FC'),
+                       2)
+                       xol_amnt,
+                   h.retention_perc,
+                   surp1_perc,
+                   surp2_perc,
+                   qs_perc,
+                   cqs_perc,
+                   facout_perc,
+                   xol_perc
+              FROM cm_payments_vw   j,
+                   uh_policy        x,
+                   ri_batch_header  bh,
+                   vw_premium_register prem,
+                   (  SELECT DISTINCT
+                             rs_org_code,
+                             rs_ri_batch_no,
+                             rs_ri_cr_index,
+                             rs_trt_code,
+                             NVL (
+                                 SUM (
+                                     DECODE (rs_line_type_int,
+                                             'Retention', rs_percent)),
+                                 0)
+                                 retention_perc,
+                             SUM (
+                                 DECODE (rs_line_type_int, 'Retention', rs_percent))
+                                 retention_perc_null,
+                             NVL (
+                                 SUM (
+                                     DECODE (rs_line_type_int,
+                                             'Surplus 1', rs_percent)),
+                                 0)
+                                 surp1_perc,
+                             NVL (
+                                 SUM (
+                                     DECODE (rs_line_type_int,
+                                             'Surplus 2', rs_percent)),
+                                 0)
+                                 surp2_perc,
+                             NVL (
+                                 SUM (DECODE (rs_line_type_int, 'QS', rs_percent)),
+                                 0)
+                                 qs_perc,
+                             NVL (
+                                 SUM (DECODE (rs_line_type_int, 'CQS', rs_percent)),
+                                 0)
+                                 cqs_perc,
+                             NVL (
+                                 SUM (
+                                     DECODE (rs_line_type_int,
+                                             'FAC Out', rs_percent)),
+                                 0)
+                                 facout_perc,
+                             0
+                                 xol_perc,
+                             NVL (
+                                 SUM (
+                                     DECODE ( :p_currency,
+                                             NULL, rs_lc_si,
+                                             rs_fc_si)),
+                                 0)
+                                 si,
+                             NVL (
+                                 SUM (
+                                     DECODE (rs_line_type_int,
+                                             'Retention', rs_lc_si)),
+                                 0)
+                                 retention_si,
+                             NVL (
+                                 SUM (
+                                     DECODE (rs_line_type_int,
+                                             'Surplus 1', rs_lc_si)),
+                                 0)
+                                 surp1_si,
+                             NVL (
+                                 SUM (
+                                     DECODE (rs_line_type_int,
+                                             'Surplus 2', rs_lc_si)),
+                                 0)
+                                 surp2_si,
+                             NVL (SUM (DECODE (rs_line_type_int, 'QS', rs_lc_si)),
+                                  0)
+                                 qs_si,
+                             NVL (SUM (DECODE (rs_line_type_int, 'CQS', rs_lc_si)),
+                                  0)
+                                 cqs_si,
+                             NVL (
+                                 SUM (
+                                     DECODE (rs_line_type_int, 'FAC Out', rs_lc_si)),
+                                 0)
+                                 facout_si,
+                             0
+                                 xol_si
+                        FROM uw_policy_ri_shares
+                       WHERE     rs_type = 'Final'
+                             AND rs_line_type_int NOT IN ('Balance')
+                    GROUP BY rs_org_code,
+                             rs_ri_batch_no,
+                             rs_ri_cr_index,
+                             rs_trt_code) h,
+                   (  SELECT DISTINCT
+                             rh.cm_org_code,
+                             rh.cm_cm_index,
+                             rh.cm_risk_index,
+                             NVL (
+                                 SUM (DECODE (cm_line_type, 'RETENTION', cm_perc)),
+                                 0)    retention_perc
+                        FROM cm_claims_ri_header rh, cm_claims_ri_alloc ra
+                       WHERE     rh.cm_cm_index = ra.cm_cm_index
+                             AND rh.cm_risk_index = ra.cm_risk_index
+                             AND rh.cm_org_code = ra.cm_org_code
+                             AND cm_line_type = 'RETENTION'
+                    GROUP BY rh.cm_org_code, rh.cm_cm_index, rh.cm_risk_index) r
+             WHERE     hd_org_code = :p_org_code
+                   AND j.hd_org_code = x.pl_org_code
+                   AND j.cm_pl_index = x.pl_index
+                   AND j.cm_end_index = x.pl_end_index
+                   AND x.pl_index = prem.pr_pl_index
+                   AND x.pl_end_index = prem.pr_end_index
+                   AND j.cr_ri_batch_no = bh.bh_batch_no(+)
+                   AND j.hd_org_code = h.rs_org_code(+)
+                   AND j.cr_ri_batch_no = h.rs_ri_batch_no(+)
+                   AND j.cr_ri_cr_index = h.rs_ri_cr_index(+)
+                   AND j.hd_org_code = r.cm_org_code(+)
+                   AND j.cm_index = r.cm_cm_index(+)
+                   AND j.cr_risk_index = r.cm_risk_index(+)
+                   --AND prem.pr_bus_type =  NVL (:p_bus_type, prem.pr_bus_type)
+                   AND NVL (prem.pr_bus_type, '0') =
+                       NVL ( :p_bus_type, NVL (prem.pr_bus_type, '0'))
+                   --and cm_index = 95315
+                   AND TRUNC (hd_gl_date) BETWEEN ( :p_fm_dt) AND ( :p_to_dt)
+                   and hd_os_code=nvl(:branchCode,hd_os_code)
+                   AND hd_cur_code = NVL ( :p_currency, hd_cur_code)
+          ORDER BY hd_gl_date DESC)
+GROUP BY org,
+         cm_no,
+         cm_index,
+         cm_end_no,
+         cm_end_no,
+         cm_int_date,
+         cm_loss_date,
+         pl_fm_dt,
+         pl_to_dt,
+         cm_pl_no,
+         cm_int_aent_code,
+         cm_int_ent_code,
+         cm_aent_code,
+         cm_ent_code,
+         hd_aent_code,
+         hd_ent_code,
+         cm_insured,
+         cm_loss_desc,
+         rs_trt_code,
+         cr_mc_code,
+         cr_sc_code,
+         pl_pr_code,
+         bp_uw_yr,
+         cm_class,
+         cm_sub_class,
+         cm_intermediary,
+         policy_type,
+         product_name,
+         cover_name,
+         pl_si,
+         retention_si,
+         surp1_si,
+         surp2_si,
+         qs_si,
+         cqs_si,
+         facout_si,
+         xol_si
+      `;
+
+      // Execute the query with parameters
+      results = (await connection).execute(query, {
+        p_org_code: "50",
+        p_currency: "",
+        p_fm_dt: fromDate,
+        p_to_dt: toDate,
+        branchCode: branchCode,
+        p_bus_type: "",
+      });
+
+      const formattedData = (await results).rows?.map((row: any) => ({
+        claimNo: row[1],
+        policyNo: row[8],
+        endNo: row[3],
+        fromDate: row[6],
+        toDate: row[7],
+        DOI: row[4],
+        DOL: row[5],
+        insured: row[15],
+        intermediary: row[25],
+        productName: row[27],
+        subClass: row[24],
+        UWyear: row[22],
+        natureOfLosss: row[16],
+        paymentMode: row[16],
+        paymentDate: row[16],
+        paymentNo: row[16],
+        "100%si": row[31],
+        "100%amt": row[29],
+        cqsAmt: row[39],
+        cqsPerc: row[42],
+        retentionAmt: row[30],
+        retentionPerc: row[45],
+        "1stSurpPerc": row[46],
+        "2ndSurpPerc": row[47],
+        qsAmt: row[42],
+        qsPerc: row[48],
+        facOutAmt: row[40],
+        facOutPerc: row[43],
+        xolAmt: row[44],
+      }));
+
+      return res.status(200).json({ result: formattedData });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: "Internal server error" });
+    } finally {
+      try {
+        if (connection) {
+          (await connection).close();
+          console.info("Connection closed successfully");
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  }
+  async getOutstandingRICessions(req: Request, res: Response) {
+    let connection;
+    let results;
+    try {
+      const toDate: string | any = req.query.toDate;
+      const branchCode: string | any = req.query.branchCode;
+      connection = (await pool).getConnection();
+      console.log("connected to database");
+
+      // Construct SQL query with conditional parameter inclusion
+      let query = `
+        SELECT a.cm_org_code,
+         a.cm_end_index,
+         a.cm_pl_index,
+         a.cm_index,
+         a.cm_pl_index,
+         a.cm_no,
+         a.cm_pl_no,
+         NVL (a.cm_end_no, f.pr_end_no)
+             cm_end_no,
+         a.cm_loss_date,
+         a.cm_int_date,
+         a.created_on,
+         a.cm_desc,
+         f.PR_INT_ENT_NAME
+             INTERMEDIARY,
+         pkg_system_admin.get_system_desc ('CM_LOSS_CAUSE', a.cm_loss_cause)
+             description_of_loss,
+         a.cm_managed_as,
+         a.cm_event_code,
+         a.cm_cur_rate_mode,
+         a.cm_opened_on,
+         b.cr_ri_batch_no,
+         b.cr_ri_cr_index,
+         b.cr_mc_code,
+         a.cm_bus_type,
+         a.cm_pr_code,
+         a.cm_cur_code,
+         NVL (x.PL_FM_DT, f.pr_to_dt)
+             pl_fm_dt,
+         NVL (x.PL_TO_DT, f.pr_to_dt)
+             pl_to_dt,
+         x.PL_FIN_CODE,
+         TO_CHAR (pr_gl_date, 'yyyy')
+             bp_uw_yr,
+         b.cr_ss_code,
+         b.cr_risk_index,
+         b.cr_cc_code,
+         UPPER (pkg_system_admin.get_class_name (cr_org_code, cr_mc_code))
+             class,
+         b.cr_sc_code,
+         pkg_system_admin.get_subclass_name (cr_org_code, cr_sc_code)
+             sub_class,
+         pkg_uw.get_product_name ( :p_org_code, pl_pr_code)
+             product_name,
+         pkg_uw.get_cover_name ( :p_org_code, cr_mc_code, cr_cc_code)
+             cover_name,
+         a.cm_int_aent_code,
+         a.cm_int_ent_code,
+         pkg_system_admin.get_entity_name (a.cm_int_aent_code,
+                                           a.cm_int_ent_code)
+             agent,
+         a.cm_aent_code,
+         a.cm_ent_code,
+         pkg_system_admin.get_entity_name (a.cm_aent_code, a.cm_ent_code)
+             insured,
+         ch_status
+             cm_status,
+         a.cm_desc,
+         a.cm_loss_cause,
+         NVL (x.pl_pr_code, f.pr_pr_code)
+             pl_pr_code,
+         pkg_uw.get_product_name ( :p_org_code,
+                                  NVL (x.pl_pr_code, f.pr_pr_code))
+             policy_type,
+         NVL (e.cm_closing_value, 0)
+             reserve_amnt,
+           NVL (
+               ROUND (
+                   (  NVL (e.cm_closing_value, 0)
+                    * (NVL (h.retention_perc, 0) + NVL (m.retention_perc_cm, 0))
+                    / 100)),
+               0)
+         - NVL (
+               (SELECT NVL (
+                           SUM (
+                               NVL (
+                                   DECODE ( :p_currency,
+                                           NULL, rs_lc_amount,
+                                           rs_fc_amount),
+                                   0)),
+                           0)
+                  FROM cm_xol_shares
+                 WHERE     rs_org_code = b.cr_org_code
+                       AND rs_cm_index = b.cr_cm_index
+                       AND rs_pl_index = a.cm_pl_index
+                       AND rs_end_index = a.cm_end_index
+                       AND rs_mc_code = b.cr_mc_code
+                       AND rs_sc_code = b.cr_sc_code
+                       AND rs_line_type != 'Retention'),
+               0)
+             retention_amnt,
+         NVL (
+             ROUND (
+                 (  NVL (e.cm_closing_value, 0)
+                  * (NVL (h.surp1_perc, 0) + NVL (m.surp1_perc_cm, 0))
+                  / 100)),
+             0)
+             surp1_amnt,
+         NVL (
+             ROUND (
+                 (  NVL (e.cm_closing_value, 0)
+                  * (NVL (h.surp2_perc, 0) + NVL (m.surp2_perc_cm, 0))
+                  / 100)),
+             0)
+             surp2_amnt,
+         NVL (
+             ROUND (
+                 (  NVL (e.cm_closing_value, 0)
+                  * (NVL (h.qs_perc, 0) + NVL (m.qs_perc_cm, 0))
+                  / 100)),
+             0)
+             qs_amnt,
+         NVL (
+             ROUND (
+                 (  NVL (e.cm_closing_value, 0)
+                  * (NVL (h.cqs_perc, 0) + NVL (m.cqs_perc_cm, 0))
+                  / 100)),
+             0)
+             cqs_amnt,
+         NVL (
+             ROUND (
+                 (  NVL (e.cm_closing_value, 0)
+                  * (NVL (h.facout_perc, 0) + NVL (m.facout_perc_cm, 0))
+                  / 100)),
+             0)
+             facout_amnt,
+           (SELECT NVL (
+                       SUM (
+                           NVL (
+                               DECODE ( :p_currency,
+                                       NULL, rs_lc_amount,
+                                       rs_fc_amount),
+                               0)),
+                       0)
+              FROM cm_xol_shares
+             WHERE     rs_org_code = b.cr_org_code
+                   AND rs_cm_index = b.cr_cm_index
+                   AND rs_pl_index = a.cm_pl_index
+                   AND rs_end_index = a.cm_end_index
+                   AND rs_mc_code = b.cr_mc_code
+                   AND rs_sc_code = b.cr_sc_code
+                   AND rs_line_type != 'Retention')
+         + NVL (
+               ROUND (
+                   (NVL (e.cm_closing_value, 0) * NVL (m.xol_perc_cm, 0) / 100)),
+               0)
+             xol_amnt,
+         DECODE (NVL (DECODE ( :p_currency, NULL, pr_lc_si, pr_fc_si), 0),
+                 0, NVL (DECODE ( :p_currency, NULL, cr_lc_si, cr_fc_si), 0),
+                 NVL (pr_lc_si, 0))
+             pl_si,
+         NVL (ROUND (NVL (h.retention_si, 0)), 0)
+             retention_si,
+         NVL (ROUND (NVL (h.surp1_si, 0)), 0)
+             surp1_si,
+         NVL (ROUND (NVL (h.surp2_si, 0)), 0)
+             surp2_si,
+         NVL (ROUND (NVL (h.qs_si, 0)), 0)
+             qs_si,
+         NVL (ROUND (NVL (h.cqs_si, 0)), 0)
+             cqs_si,
+         NVL (ROUND (NVL (h.facout_si, 0)), 0)
+             facout_si
+    FROM cm_claims          a,
+         ri_batch_header    bh,
+         uh_policy          x,
+         cm_claims_risks    b,
+         uw_premium_register f,
+         (  SELECT eh_org_code,
+                   eh_cm_index,
+                   NVL (SUM (NVL (cm_closing_value, 0)), 0)     cm_closing_value
+              FROM (  SELECT DISTINCT
+                             d.eh_org_code,
+                             d.eh_cm_index,
+                             d.eh_ce_index,
+                             d.eh_status,
+                             NVL (
+                                 DECODE ( :p_currency,
+                                         NULL, d.eh_new_lc_amount,
+                                         d.eh_new_fc_amount),
+                                 0)    cm_closing_value
+                        FROM cm_estimates_history d
+                       WHERE     d.created_on =
+                                 (SELECT DISTINCT MAX (g.created_on)
+                                    FROM cm_estimates_history g
+                                   WHERE     TRUNC (g.created_on) <=
+                                             TRUNC ( :p_asatdate)
+                                         AND g.eh_org_code = d.eh_org_code
+                                         AND g.eh_cm_index = d.eh_cm_index
+                                         AND g.eh_ce_index = d.eh_ce_index)
+                             AND TRUNC (d.created_on) <= TRUNC ( :p_asatdate)
+                             AND d.eh_status NOT IN ('Closed', 'Fully Paid')
+                    ORDER BY d.eh_cm_index, d.eh_ce_index)
+          GROUP BY eh_org_code, eh_cm_index) e,
+         (SELECT DISTINCT a.ch_org_code,
+                          a.ch_cm_index,
+                          a.created_on,
+                          a.ch_status
+            FROM cm_claims_history a
+           WHERE a.created_on =
+                 (SELECT DISTINCT MAX (b.created_on)
+                    FROM cm_claims_history b
+                   WHERE     TRUNC (b.created_on) <= TRUNC ( :p_asatdate)
+                         AND b.ch_org_code = a.ch_org_code
+                         AND b.ch_cm_index = a.ch_cm_index)) g,
+         (  SELECT DISTINCT
+                   rs_org_code,
+                   rs_ri_batch_no,
+                   rs_ri_cr_index,
+                   NVL (SUM (DECODE (rs_line_type_int, 'Retention', rs_percent)),
+                        0)
+                       retention_perc,
+                   NVL (SUM (DECODE (rs_line_type_int, 'Surplus 1', rs_percent)),
+                        0)
+                       surp1_perc,
+                   NVL (SUM (DECODE (rs_line_type_int, 'Surplus 2', rs_percent)),
+                        0)
+                       surp2_perc,
+                   NVL (SUM (DECODE (rs_line_type_int, 'QS', rs_percent)), 0)
+                       qs_perc,
+                   NVL (SUM (DECODE (rs_line_type_int, 'CQS', rs_percent)), 0)
+                       cqs_perc,
+                   NVL (SUM (DECODE (rs_line_type_int, 'FAC Out', rs_percent)),
+                        0)
+                       facout_perc,
+                   NVL (SUM (rs_lc_si), 0)
+                       si,
+                   NVL (
+                       SUM (
+                           DECODE (
+                               rs_line_type_int,
+                               'Retention', DECODE ( :p_currency,
+                                                    NULL, rs_lc_si,
+                                                    rs_fc_si))),
+                       0)
+                       retention_si,
+                   NVL (
+                       SUM (
+                           DECODE (
+                               rs_line_type_int,
+                               'Surplus 1', DECODE ( :p_currency,
+                                                    NULL, rs_lc_si,
+                                                    rs_fc_si))),
+                       0)
+                       surp1_si,
+                   NVL (
+                       SUM (
+                           DECODE (
+                               rs_line_type_int,
+                               'Surplus 2', DECODE ( :p_currency,
+                                                    NULL, rs_lc_si,
+                                                    rs_fc_si))),
+                       0)
+                       surp2_si,
+                   NVL (
+                       SUM (
+                           DECODE (
+                               rs_line_type_int,
+                               'QS', DECODE ( :p_currency,
+                                             NULL, rs_lc_si,
+                                             rs_fc_si))),
+                       0)
+                       qs_si,
+                   NVL (
+                       SUM (
+                           DECODE (
+                               rs_line_type_int,
+                               'CQS', DECODE ( :p_currency,
+                                              NULL, rs_lc_si,
+                                              rs_fc_si))),
+                       0)
+                       cqs_si,
+                   NVL (
+                       SUM (
+                           DECODE (
+                               rs_line_type_int,
+                               'FAC Out', DECODE ( :p_currency,
+                                                  NULL, rs_lc_si,
+                                                  rs_fc_si))),
+                       0)
+                       facout_si
+              FROM uw_policy_ri_shares
+             WHERE rs_type = 'Final' AND rs_line_type_int NOT IN ('Balance')
+          GROUP BY rs_org_code, rs_ri_batch_no, rs_ri_cr_index) h,
+         (  SELECT a.cm_org_code,
+                   a.cm_cm_index,
+                   NVL (SUM (DECODE (cm_line_type, 'RETENTION', cm_perc)), 0)
+                       retention_perc_cm,
+                   NVL (SUM (DECODE (cm_line_type, 'SURPLUS 1', cm_perc)), 0)
+                       surp1_perc_cm,
+                   NVL (SUM (DECODE (cm_line_type, 'SURPLUS 2', cm_perc)), 0)
+                       surp2_perc_cm,
+                   NVL (SUM (DECODE (cm_line_type, 'QS', cm_perc)), 0)
+                       qs_perc_cm,
+                   NVL (SUM (DECODE (cm_line_type, 'CQS', cm_perc)), 0)
+                       cqs_perc_cm,
+                   NVL (SUM (DECODE (cm_line_type, 'FAC OUT', cm_perc)), 0)
+                       facout_perc_cm,
+                   NVL (SUM (DECODE (cm_line_type, 'XOL', cm_perc)), 0)
+                       xol_perc_cm
+              FROM cm_claims_ri_header a, cm_claims_ri_alloc b
+             WHERE     b.cm_org_code = b.cm_org_code
+                   AND a.cm_cm_index = b.cm_cm_index
+          GROUP BY a.cm_org_code, a.cm_cm_index) m
+   WHERE     a.cm_org_code = :p_org_code
+    AND a.CM_OS_CODE = NVL ( :branchCode, a.cm_os_code)
+         AND a.cm_org_code = b.cr_org_code
+         AND a.cm_index = b.cr_cm_index
+         AND a.cm_org_code = f.pr_org_code(+)
+         AND a.cm_pl_index = f.pr_pl_index(+)
+         AND a.cm_end_index = f.pr_end_index(+)
+         AND b.cr_mc_code = f.pr_mc_code(+)
+         AND b.cr_sc_code = f.pr_sc_code(+)
+         AND a.cm_org_code = g.ch_org_code
+         AND a.cm_index = g.ch_cm_index
+         AND b.cr_org_code = e.eh_org_code
+         AND b.cr_cm_index = e.eh_cm_index
+         AND g.ch_status NOT IN ('Closed', 'Closed - No Claim')
+         AND a.cm_register = 'Y'
+         AND f.pr_bus_type = NVL ( :p_bus_type, pr_bus_type)
+         --ri
+         AND a.cm_org_code = x.PL_ORG_CODE(+)
+         AND a.cm_pl_index = x.PL_INDEX(+)
+         AND a.CM_END_INDEX = x.PL_END_INDEX(+)
+         AND b.CR_RI_BATCH_NO = bh.BH_BATCH_NO(+)
+         AND b.cr_org_code = h.rs_org_code(+)
+         AND b.cr_ri_batch_no = h.rs_ri_batch_no(+)
+         AND b.cr_ri_cr_index = h.rs_ri_cr_index(+)
+         AND a.cm_org_code = m.cm_org_code(+)
+         AND a.cm_index = m.cm_cm_index(+)
+ORDER BY a.created_on,
+         b.cr_mc_code,
+         b.cr_sc_code,
+         a.cm_no,
+         a.cm_pl_no
+      `;
+
+      // Execute the query with parameters
+      results = (await connection).execute(query, {
+        p_org_code: "50",
+        p_asatdate: new Date(toDate),
+        branchCode: branchCode,
+        p_bus_type: "",
+        p_currency: "",
+      });
+
+      const formattedData = (await results).rows?.map((row: any) => ({
+        claimNo: row[5],
+        policyNo: row[6],
+        fromDate: row[24],
+        toDate: row[25],
+        DOI: row[9],
+        DOL: row[8],
+        registeredOn: row[10],
+        insured: row[41],
+        intermediary: row[12],
+        productName: row[34],
+        subClass: row[33],
+        UWyear: row[27],
+        lossCause: row[46],
+
+        "100%si": row[55],
+        "100%amt": row[47],
+        cqsAmt: row[52],
+
+        retentionAmt: row[48],
+
+        "1stSurpAmt": row[49],
+        "2ndSurpAmt": row[50],
+        qsAmt: row[51],
+
+        facOutAmt: row[53],
+
+        xolAmt: row[54],
+      }));
+
+      return res.status(200).json({ result: formattedData });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: "Internal server error" });
+    } finally {
+      try {
+        if (connection) {
+          (await connection).close();
+          console.info("Connection closed successfully");
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  }
+  async getDirectClients(req: Request, res: Response) {
+    let connection;
+    let results;
+    try {
+      const branchCode: string | any = req.query.branchCode;
+      connection = (await pool).getConnection();
+      console.log("connected to database");
+
+      // Construct SQL query with conditional parameter inclusion
+      let query = `
+      SELECT COUNT (pr_int_aent_code)     AS total_clients,
+      pr_int_aent_code,
+      pr_os_code
+ FROM uw_premium_register a
+      JOIN all_entity b ON b.ENT_CODE = a.PR_INT_ENT_CODE
+WHERE b.ent_status = 'ACTIVE' and pr_os_code = nvl(:branchCode,pr_os_code) and pr_int_aent_code='15'
+GROUP BY pr_int_aent_code, pr_os_code
+      `;
+
+      // Execute the query with parameters
+      results = (await connection).execute(query, {
+        branchCode: branchCode,
+      });
+
+      const formattedData = (await results).rows?.map((row: any) => ({
+        totalClients: row[0],
+        clientCode: row[1],
       }));
 
       return res.status(200).json({ result: formattedData });
