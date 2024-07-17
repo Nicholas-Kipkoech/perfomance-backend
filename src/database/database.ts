@@ -1,4 +1,7 @@
+import { config } from "dotenv";
 import oracledb from "oracledb";
+
+config();
 
 /** utility function for getting connection keys based on the enviroment */
 function getDbkeys() {

@@ -69,4 +69,7 @@ perfomanceRouter.get("/ri-paid-cession-report", (req, res) => {
 perfomanceRouter.get("/ri-outstanding-cession-report", (req, res) => {
   perfomanceController.getOutstandingRICessions(req, res);
 });
+perfomanceRouter.get("/management-expenses", (req, res) => {
+  perfomanceController.getManagementExpenses(req, res);
+});
 export default perfomanceRouter;

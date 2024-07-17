@@ -4823,6 +4823,93 @@ GROUP BY pr_int_aent_code, pr_os_code
       }
     }
   }
+  async getManagementExpenses(req: Request, res: Response) {
+    let connection;
+    let results;
+    try {
+      const fromDate: string | any = req.query.fromDate;
+      const toDate: string | any = req.query.toDate;
+      const branchCode: string | any = req.query.branchCode;
+      connection = (await pool).getConnection();
+      console.log("connected to database");
+
+      // Construct SQL query with conditional parameter inclusion
+      let query = `
+     /* Formatted on 7/17/2024 11:40:07 AM (QP5 v5.336) */
+  SELECT a.trn_org_code,
+         trn_doc_type,
+         a.trn_module_code,
+         b.mgl_code,
+         b.mgl_name,
+         a.trn_doc_no,
+         TRUNC (a.trn_doc_gl_dt)
+             trn_doc_gl_dt,
+         a.trn_narration,
+         a.trn_drcr_flag,
+         a.trn_cur_code,
+         a.trn_cur_rate,
+         (  DECODE (a.trn_drcr_flag,
+                    'D', NVL (a.trn_doc_fc_amt, 0),
+                    (NVL (a.trn_doc_fc_amt, 0) * -1))
+          * a.trn_cur_rate)
+             trn_doc_fc_amt,
+         a.trn_os_code,
+         UPPER (pkg_sa.org_structure_name (a.trn_org_code, a.trn_os_code))
+             trn_os_name,
+         c.col_code,
+         c.col_name
+    FROM gl_transactions a, gl_main_ledgers b, gl_coa_levels c
+   WHERE     a.trn_org_code = b.mgl_org_code
+         AND a.trn_mgl_code = b.mgl_code
+         AND b.mgl_org_code = c.col_org_code
+         AND b.mgl_coa_code = c.col_coa_code
+         AND b.mgl_col_code = c.col_code
+         AND a.trn_org_code = :p_org_code
+         --    AND b.mgl_code = NVL (:p_mgl_code, b.mgl_code)
+         AND c.col_code = NVL ( :p_col_code, c.col_code)
+         AND a.trn_os_code = NVL ( :p_branch, a.trn_os_code)
+         AND a.trn_cur_code = NVL ( :p_currency, a.trn_cur_code)
+         AND TRUNC (a.trn_doc_gl_dt) BETWEEN TRUNC (
+                                                 NVL ( :p_fm_dt,
+                                                      a.trn_doc_gl_dt))
+                                         AND TRUNC (
+                                                 NVL ( :p_to_dt,
+                                                      a.trn_doc_gl_dt))
+ORDER BY TRUNC (trn_doc_gl_dt),
+         trn_doc_no,
+         trn_mgl_code,
+         trn_os_code
+      `;
+
+      // Execute the query with parameters
+      results = (await connection).execute(query, {
+        p_org_code: "50",
+        p_branch: branchCode,
+        p_col_code: "ME",
+        p_currency: "",
+        p_fm_dt: new Date(fromDate),
+        p_to_dt: new Date(toDate),
+      });
+
+      const formattedData = (await results).rows?.map((row: any) => ({
+        transactionAmt: row[11],
+      }));
+
+      return res.status(200).json({ result: formattedData });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: "Internal server error" });
+    } finally {
+      try {
+        if (connection) {
+          (await connection).close();
+          console.info("Connection closed successfully");
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  }
 }
 
 const performanceController = new PerformanceController();
