@@ -28,7 +28,7 @@ export const pool = oracledb.createPool({
   password: password,
   connectionString: connString,
   poolMin: 5,
-  poolMax: 100,
+  poolMax: 5,
   poolIncrement: 5,
 });
 
