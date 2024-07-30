@@ -2704,8 +2704,8 @@ ORDER BY pr_mc_code
       results = (await connection).execute(query, {
         p_org_code: "50",
         p_currency: "",
-        p_fm_dt: fromDate,
-        p_to_dt: toDate,
+        p_fm_dt: new Date(fromDate),
+        p_to_dt: new Date(toDate),
         branchCode: branchCode,
       });
 
