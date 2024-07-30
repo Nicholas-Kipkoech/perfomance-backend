@@ -621,7 +621,7 @@ ORDER BY pr_org_code, pr_pl_index, pr_end_index
 
       // Construct SQL query with conditional parameter inclusion
       let query = `
-        SELECT DISTINCT
+       SELECT DISTINCT
          a.hd_org_code,
          a.hd_no,
          a.cm_no,
@@ -686,20 +686,7 @@ ORDER BY pr_org_code, pr_pl_index, pr_end_index
          pkg_system_admin.get_entity_name (cm_int_aent_code, cm_int_ent_code)
              inter,
          NVL (b.os_code, '100')
-             pr_os_code,
-         HD_ESTIMATE_CODE
-             code_type,
-         (SELECT rs_name
-            FROM cm_reserve_setup
-           WHERE rs_code =
-                 NVL ((SELECT ce_code
-                         FROM cm_estimates
-                        WHERE ce_index = (SELECT CE_REF_CE_INDEX
-                                            FROM cm_estimates
-                                           WHERE ce_index = hd_ce_index)),
-                      HD_ESTIMATE_CODE))
-             reserve_type
-    --(select rs_name from cm_reserve_setup where rs_code= HD_ESTIMATE_CODE ) reserve_type
+             pr_os_code
     FROM cm_payments_vw     a,
          vw_premium_register c,
          (SELECT DISTINCT
