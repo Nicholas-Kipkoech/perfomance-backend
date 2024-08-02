@@ -72,4 +72,7 @@ perfomanceRouter.get("/ri-outstanding-cession-report", (req, res) => {
 perfomanceRouter.get("/management-expenses", (req, res) => {
   perfomanceController.getManagementExpenses(req, res);
 });
+perfomanceRouter.get("/bank-balances", (req, res) => {
+  perfomanceController.getBankBalances(req, res);
+});
 export default perfomanceRouter;

@@ -4897,6 +4897,64 @@ ORDER BY TRUNC (trn_doc_gl_dt),
       }
     }
   }
+  async getBankBalances(req: Request, res: Response) {
+    let connection;
+    let results;
+    try {
+      connection = (await pool).getConnection();
+      console.log("connected to database");
+
+      // Construct SQL query with conditional parameter inclusion
+      let query = ` 
+  SELECT BACNT_BANK_CODE,
+         BACNT_BBRN_CODE,
+         BACNT_ACNO,
+         BACNT_NAME,
+         BACNT_CUR_CODE,
+         TRN_CUR_CODE,
+         BACNT_MGL_CODE,
+         SUM (TRN_DOC_FC_AMT * DECODE (b.TRN_DRCR_FLAG,  'D', 1,  'C', -1,  0))    AMOUNT
+    FROM gl_bank_account a, gl_transactions b
+     
+   WHERE a.BACNT_MGL_CODE = b.TRN_MGL_CODE AND BACNT_ENABLED = 'Y'
+GROUP BY BACNT_BANK_CODE,
+         BACNT_BBRN_CODE,
+         BACNT_ACNO,
+         BACNT_NAME,
+         BACNT_CUR_CODE,
+         BACNT_MGL_CODE,
+         TRN_CUR_CODE
+      `;
+
+      // Execute the query with parameters
+      results = (await connection).execute(query);
+
+      const formattedData = (await results).rows?.map((row: any) => ({
+        bankCode: row[0],
+        bankBranchCode: row[1],
+        bankAccountNo: row[2],
+        bankAccountName: row[3],
+        bankCurCode: row[4],
+        bankTrnCode: row[5],
+        ledgerCode: row[6],
+        amount: row[7],
+      }));
+
+      return res.status(200).json({ result: formattedData });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: "Internal server error" });
+    } finally {
+      try {
+        if (connection) {
+          (await connection).close();
+          console.info("Connection closed successfully");
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  }
 }
 
 const performanceController = new PerformanceController();
