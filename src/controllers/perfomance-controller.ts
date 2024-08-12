@@ -119,7 +119,7 @@ END;`,
             bgColor: (await result).outBinds.v_bg_color,
           },
           "hhsyyahashhshsggaga",
-          { expiresIn: "1d" }
+          { expiresIn: "20m" }
         );
 
         user = {
@@ -4916,7 +4916,7 @@ ORDER BY TRUNC (trn_doc_gl_dt),
          SUM (TRN_DOC_FC_AMT * DECODE (b.TRN_DRCR_FLAG,  'D', 1,  'C', -1,  0))    AMOUNT
     FROM gl_bank_account a, gl_transactions b
      
-   WHERE a.BACNT_MGL_CODE = b.TRN_MGL_CODE AND BACNT_ENABLED = 'Y'
+   WHERE a.BACNT_MGL_CODE = b.TRN_MGL_CODE AND BACNT_ENABLED = 'Y' and UPPER(BACNT_BANK_CODE) != 'FOREX'
 GROUP BY BACNT_BANK_CODE,
          BACNT_BBRN_CODE,
          BACNT_ACNO,
