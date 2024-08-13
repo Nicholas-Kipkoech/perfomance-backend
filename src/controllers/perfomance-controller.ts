@@ -4902,8 +4902,9 @@ ORDER BY TRUNC (trn_doc_gl_dt),
     let results;
     try {
       connection = (await pool).getConnection();
-      const fromDate = req.body;
-      const toDate = req.body;
+      const fromDate: string | any = req.query.fromDate;
+      const toDate: string | any = req.query.toDate;
+      const branchCode: string | any = req.query.branchCode;
       console.log("connected to database");
 
       // Construct SQL query with conditional parameter inclusion
@@ -4927,6 +4928,7 @@ ORDER BY TRUNC (trn_doc_gl_dt),
                                          AND TRUNC (
                                                  NVL ( :p_to_dt,
                                                       b.trn_doc_gl_dt))
+                                                      and b.TRN_OS_CODE = nvl(:branchCode,b.TRN_OS_CODE)
 GROUP BY BACNT_BANK_CODE,
          BACNT_BBRN_CODE,
          BACNT_ACNO,
@@ -4940,6 +4942,7 @@ GROUP BY BACNT_BANK_CODE,
       results = (await connection).execute(query, {
         p_fm_dt: new Date(fromDate),
         p_to_dt: new Date(toDate),
+        branchCode: branchCode,
       });
 
       const formattedData = (await results).rows?.map((row: any) => ({
