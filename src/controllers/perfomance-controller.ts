@@ -4902,7 +4902,7 @@ ORDER BY TRUNC (trn_doc_gl_dt),
     let results;
     try {
       connection = (await pool).getConnection();
-      const fromDate: string | any = req.query.fromDate;
+
       const toDate: string | any = req.query.toDate;
       const branchCode: string | any = req.query.branchCode;
       console.log("connected to database");
@@ -4937,7 +4937,6 @@ GROUP BY BACNT_BANK_CODE,
 
       // Execute the query with parameters
       results = (await connection).execute(query, {
-        p_fm_dt: new Date(fromDate),
         p_to_dt: new Date(toDate),
         branchCode: branchCode,
       });
