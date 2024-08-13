@@ -4922,10 +4922,7 @@ ORDER BY TRUNC (trn_doc_gl_dt),
    WHERE     a.BACNT_MGL_CODE = b.TRN_MGL_CODE
          AND BACNT_ENABLED = 'Y'
          AND UPPER (BACNT_BANK_CODE) != 'FOREX'
-         AND TRUNC (b.trn_doc_gl_dt) BETWEEN TRUNC (
-                                                 NVL ( :p_fm_dt,
-                                                      b.trn_doc_gl_dt))
-                                         AND TRUNC (
+         AND TRUNC (b.trn_doc_gl_dt) <= TRUNC (
                                                  NVL ( :p_to_dt,
                                                       b.trn_doc_gl_dt))
                                                       and b.TRN_OS_CODE = nvl(:branchCode,b.TRN_OS_CODE)
