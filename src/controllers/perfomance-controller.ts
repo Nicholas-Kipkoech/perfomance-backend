@@ -4902,10 +4902,13 @@ ORDER BY TRUNC (trn_doc_gl_dt),
     let results;
     try {
       connection = (await pool).getConnection();
+      const fromDate = req.body;
+      const toDate = req.body;
       console.log("connected to database");
 
       // Construct SQL query with conditional parameter inclusion
       let query = ` 
+  /* Formatted on 8/13/2024 11:18:01 AM (QP5 v5.336) */
   SELECT BACNT_BANK_CODE,
          BACNT_BBRN_CODE,
          BACNT_ACNO,
@@ -4915,8 +4918,15 @@ ORDER BY TRUNC (trn_doc_gl_dt),
          BACNT_MGL_CODE,
          SUM (TRN_DOC_FC_AMT * DECODE (b.TRN_DRCR_FLAG,  'D', 1,  'C', -1,  0))    AMOUNT
     FROM gl_bank_account a, gl_transactions b
-     
-   WHERE a.BACNT_MGL_CODE = b.TRN_MGL_CODE AND BACNT_ENABLED = 'Y' and UPPER(BACNT_BANK_CODE) != 'FOREX'
+   WHERE     a.BACNT_MGL_CODE = b.TRN_MGL_CODE
+         AND BACNT_ENABLED = 'Y'
+         AND UPPER (BACNT_BANK_CODE) != 'FOREX'
+         AND TRUNC (b.trn_doc_gl_dt) BETWEEN TRUNC (
+                                                 NVL ( :p_fm_dt,
+                                                      b.trn_doc_gl_dt))
+                                         AND TRUNC (
+                                                 NVL ( :p_to_dt,
+                                                      b.trn_doc_gl_dt))
 GROUP BY BACNT_BANK_CODE,
          BACNT_BBRN_CODE,
          BACNT_ACNO,
@@ -4927,7 +4937,10 @@ GROUP BY BACNT_BANK_CODE,
       `;
 
       // Execute the query with parameters
-      results = (await connection).execute(query);
+      results = (await connection).execute(query, {
+        p_fm_dt: new Date(fromDate),
+        p_to_dt: new Date(toDate),
+      });
 
       const formattedData = (await results).rows?.map((row: any) => ({
         bankCode: row[0],
