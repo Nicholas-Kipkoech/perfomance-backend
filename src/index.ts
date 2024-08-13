@@ -3,7 +3,7 @@ import perfomanceRouter from "./routes/perfomance-routes";
 import cors from "cors";
 const app: Express = express();
 
-const port = 6020;
+const port = 5004;
 app.use(cors());
 app.use(express.json());
 
