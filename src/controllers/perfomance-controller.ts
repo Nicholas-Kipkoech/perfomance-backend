@@ -4980,121 +4980,188 @@ GROUP BY BACNT_BANK_CODE,
 
       // Construct SQL query with conditional parameter inclusion
       let query = ` 
-  SELECT pr_org_code,
-         NVL (ent_os_code, pr_os_code)
-             pr_os_code,
-         (SELECT os_name
-            FROM hi_org_structure
-           WHERE os_code = NVL (ent_os_code, pr_os_code))
-             os_name,
-         (SELECT NVL (
-                     SUM (
-                           DECODE (
-                               :p_currency,
-                               NULL, (  NVL (rcp.trn_doc_fc_amt, 0)
-                                      * rcp.trn_cur_rate),
-                               NVL (rcp.trn_doc_fc_amt, 0))
-                         * DECODE (rcp.TRN_DRCR_FLAG,  'C', 1,  'D', -1,  0)),
-                     0)    credit_net
-            FROM all_entity a, GL_TRANSACTIONS rcp
-           WHERE     TRN_DOC_TYPE IN ('AR-RECEIPT', 'AR-RECEIPT-NS')
-                 AND trn_mgl_code = 'CA025'
-                 AND NVL (a.ent_os_code, trn_os_code) =
-                     NVL (g.ent_os_code, pr_os_code)
-                 AND a.ENT_AENT_CODE = trn_aent_code
-                 AND a.ENT_CODE = trn_ent_code
-                 AND TRUNC (trn_doc_gl_dt) BETWEEN :p_fm_dt AND :p_to_dt)
-             pr_receipts_total,
-         SUM (
-             NVL (
-                 CASE
-                     WHEN pr_net_effect IN ('Credit')
-                     THEN
-                         NVL (
-                             (  (DECODE (
-                                     :p_currency,
-                                     NULL, NVL (
-                                               (  NVL (pr_fc_prem, 0)
-                                                * pr_cur_rate),
-                                               0),
-                                     NVL (pr_fc_prem, 0)))
-                              * -1),
-                             0)
-                     ELSE
-                         NVL (
-                             DECODE (
-                                 :p_currency,
-                                 NULL, NVL (
-                                           (NVL (pr_fc_prem, 0) * pr_cur_rate),
-                                           0),
-                                 NVL (pr_fc_prem, 0)),
-                             0)
-                 END,
-                 0))
-             pr_lc_prem,
-         SUM (
-             NVL (
-                 CASE
-                     WHEN pr_net_effect IN ('Credit')
-                     THEN
-                         NVL (
-                             (  (DECODE (
-                                     :p_currency,
-                                     NULL, NVL (
-                                               (  NVL (pr_fc_eartquake, 0)
-                                                * pr_cur_rate),
-                                               0),
-                                     NVL (pr_fc_eartquake, 0)))
-                              * -1),
-                             0)
-                     ELSE
-                         NVL (
-                             DECODE (
-                                 :p_currency,
-                                 NULL, NVL (
-                                           (  NVL (pr_fc_eartquake, 0)
-                                            * pr_cur_rate),
-                                           0),
-                                 NVL (pr_fc_eartquake, 0)),
-                             0)
-                 END,
-                 0))
-             pr_lc_eartquake,
-         SUM (
-             NVL (
-                 CASE
-                     WHEN pr_net_effect IN ('Credit')
-                     THEN
-                         NVL (
-                             (  (DECODE (
-                                     :p_currency,
-                                     NULL, NVL (
-                                               (  NVL (pr_fc_political, 0)
-                                                * pr_cur_rate),
-                                               0),
-                                     NVL (pr_fc_political, 0)))
-                              * -1),
-                             0)
-                     ELSE
-                         NVL (
-                             DECODE (
-                                 :p_currency,
-                                 NULL, NVL (
-                                           (  NVL (pr_fc_political, 0)
-                                            * pr_cur_rate),
-                                           0),
-                                 NVL (pr_fc_political, 0)),
-                             0)
-                 END,
-                 0))
-             pr_lc_political
-    FROM uw_premium_register, all_entity g
-   WHERE     pr_org_code = :p_org_code
-         AND pr_int_aent_code = ent_aent_code(+)
-         AND pr_int_ent_code = ent_code(+)
-         and NVL (ent_os_code, pr_os_code) = nvl(:branchCode,pr_os_code)
-GROUP BY pr_org_code, NVL (ent_os_code, pr_os_code)
-ORDER BY pr_org_code, pr_os_code
+ SELECT pr_org_code,
+         pr_os_code,
+         os_name,
+         SUM (pr_receipts_total)                                 receipt_totals,
+         SUM (pr_lc_prem + pr_lc_eartquake + pr_lc_political)    premium,
+         SUM (credit_notes_amount)                               credit_notes_total
+    FROM (  SELECT pr_org_code,
+                   NVL (ent_os_code, pr_os_code)
+                       pr_os_code,
+                   (SELECT os_name
+                      FROM hi_org_structure
+                     WHERE os_code = NVL (ent_os_code, pr_os_code))
+                       os_name,
+                   (SELECT NVL (
+                               SUM (
+                                     DECODE (
+                                         :p_currency,
+                                         NULL, (  NVL (rcp.trn_doc_fc_amt, 0)
+                                                * rcp.trn_cur_rate),
+                                         NVL (rcp.trn_doc_fc_amt, 0))
+                                   * DECODE (rcp.TRN_DRCR_FLAG,
+                                             'C', 1,
+                                             'D', -1,
+                                             0)),
+                               0)    credit_net
+                      FROM all_entity a, GL_TRANSACTIONS rcp
+                     WHERE     TRN_DOC_TYPE IN ('AR-RECEIPT', 'AR-RECEIPT-NS')
+                           AND trn_mgl_code = 'CA025'
+                           AND NVL (a.ent_os_code, trn_os_code) =
+                               NVL (g.ent_os_code, pr_os_code)
+                           AND a.ENT_AENT_CODE = trn_aent_code
+                           AND a.ENT_CODE = trn_ent_code
+                           AND TRUNC (trn_doc_gl_dt) BETWEEN :p_fm_dt
+                                                         AND :p_to_dt)
+                       pr_receipts_total,
+                   SUM (
+                       NVL (
+                           CASE
+                               WHEN pr_net_effect IN ('Credit')
+                               THEN
+                                   NVL (
+                                       (  (DECODE (
+                                               :p_currency,
+                                               NULL, NVL (
+                                                         (  NVL (pr_fc_prem, 0)
+                                                          * pr_cur_rate),
+                                                         0),
+                                               NVL (pr_fc_prem, 0)))
+                                        * -1),
+                                       0)
+                               ELSE
+                                   NVL (
+                                       DECODE (
+                                           :p_currency,
+                                           NULL, NVL (
+                                                     (  NVL (pr_fc_prem, 0)
+                                                      * pr_cur_rate),
+                                                     0),
+                                           NVL (pr_fc_prem, 0)),
+                                       0)
+                           END,
+                           0))
+                       pr_lc_prem,
+                   SUM (
+                       NVL (
+                           CASE
+                               WHEN pr_net_effect IN ('Credit')
+                               THEN
+                                   NVL (
+                                       (  (DECODE (
+                                               :p_currency,
+                                               NULL, NVL (
+                                                         (  NVL (pr_fc_eartquake,
+                                                                 0)
+                                                          * pr_cur_rate),
+                                                         0),
+                                               NVL (pr_fc_eartquake, 0)))
+                                        * -1),
+                                       0)
+                               ELSE
+                                   NVL (
+                                       DECODE (
+                                           :p_currency,
+                                           NULL, NVL (
+                                                     (  NVL (pr_fc_eartquake, 0)
+                                                      * pr_cur_rate),
+                                                     0),
+                                           NVL (pr_fc_eartquake, 0)),
+                                       0)
+                           END,
+                           0))
+                       pr_lc_eartquake,
+                   SUM (
+                       NVL (
+                           CASE
+                               WHEN pr_net_effect IN ('Credit')
+                               THEN
+                                   NVL (
+                                       (  (DECODE (
+                                               :p_currency,
+                                               NULL, NVL (
+                                                         (  NVL (pr_fc_political,
+                                                                 0)
+                                                          * pr_cur_rate),
+                                                         0),
+                                               NVL (pr_fc_political, 0)))
+                                        * -1),
+                                       0)
+                               ELSE
+                                   NVL (
+                                       DECODE (
+                                           :p_currency,
+                                           NULL, NVL (
+                                                     (  NVL (pr_fc_political, 0)
+                                                      * pr_cur_rate),
+                                                     0),
+                                           NVL (pr_fc_political, 0)),
+                                       0)
+                           END,
+                           0))
+                       pr_lc_political,
+                   0
+                       credit_notes_amount
+              FROM uw_premium_register a, all_entity g
+             WHERE     pr_org_code = :p_org_code
+                   AND pr_int_aent_code = ent_aent_code(+)
+                   AND pr_int_ent_code = ent_code(+)
+                   -- AND pr_org_code = trn_org_code(+)
+                   --AND NVL (ent_os_code, pr_os_code) = trn_os_code(+)
+                   AND NVL (ent_os_code, pr_os_code) =
+                       NVL ( :branchCode, pr_os_code)
+          GROUP BY pr_org_code, NVL (ent_os_code, pr_os_code)
+          UNION ALL
+          SELECT trn_org_code
+                     PR_OG_CODE,
+                 trn_os_code
+                     pr_os_code,
+                 (SELECT os_name
+                    FROM hi_org_structure
+                   WHERE os_code = NVL (ent_os_code, trn_os_code))
+                     os_name,
+                 0
+                     pr_receipts_total,
+                 0
+                     pr_lc_prem,
+                 0
+                     pr_lc_eartquake,
+                 0
+                     pr_lc_political,
+                 NVL (
+                     (DECODE (
+                          :p_currency,
+                          NULL, DECODE (trn_drcr_flag,
+                                        'C', NVL (trn_doc_lc_amt, 0),
+                                        (NVL (trn_doc_lc_amt, 0) * -1)),
+                          DECODE (trn_drcr_flag,
+                                  'C', NVL (trn_doc_fc_amt, 0),
+                                  (NVL (trn_doc_fc_amt, 0) * -1)))),
+                     0)
+                     credit_notes_amount
+            FROM gl_transactions a,
+                 cm_claims      b,
+                 gl_je_header   c,
+                 all_entity     d
+           WHERE     trn_org_code = :p_org_code
+                 AND trn_ent_code IS NOT NULL
+                 AND trn_doc_type = 'GL-JOURNAL'
+                 --  AND trn_flex01 = 'CREDIT NOTE'
+                 AND hd_org_code = cm_org_code(+)
+                 AND hd_batch_no = cm_no(+)
+                 AND trn_org_code = hd_org_code
+                 AND trn_org_doc_no = hd_no
+                 AND hd_type = 'CREDIT NOTE'
+                 AND trn_aent_code = ent_aent_code
+                 AND trn_ent_code = ent_code
+                 AND TRUNC (trn_doc_gl_dt) BETWEEN TRUNC (
+                                                       NVL ( :p_fm_dt,
+                                                            trn_doc_gl_dt))
+                                               AND TRUNC (
+                                                       NVL ( :p_to_dt,
+                                                            trn_doc_gl_dt)))
+GROUP BY pr_org_code, pr_os_code, os_name
       `;
 
       // Execute the query with parameters
@@ -5109,8 +5176,8 @@ ORDER BY pr_org_code, pr_os_code
       const formattedData = (await results).rows?.map((row: any) => ({
         branchName: row[2],
         receiptTotal: row[3],
-        totalPremium: row[4] + row[5] + row[6],
-        totalInvoiceAmt: 0,
+        totalPremium: row[4],
+        totalInvoiceAmt: row[5],
       }));
 
       return res.status(200).json({ result: formattedData });
