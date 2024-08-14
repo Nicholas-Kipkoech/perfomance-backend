@@ -4985,9 +4985,9 @@ GROUP BY BACNT_BANK_CODE,
          pr_os_code,
          os_name,
          SUM (pr_receipts_total)       receipt_totals,
-         SUM (pr_lc_prem),
-         SUM (pr_lc_political),
-         SUM (pr_lc_eartquake)         premium,
+         SUM (pr_lc_prem+
+         pr_lc_political+
+         pr_lc_eartquake)        premium,
          SUM (credit_notes_amount)     credit_notes_total
     FROM (  SELECT pr_org_code,
                    NVL (ent_os_code, pr_os_code)
