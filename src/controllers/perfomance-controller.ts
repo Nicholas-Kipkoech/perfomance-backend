@@ -4980,7 +4980,7 @@ GROUP BY BACNT_BANK_CODE,
 
       // Construct SQL query with conditional parameter inclusion
       let query = ` 
- SELECT pr_org_code,
+  SELECT pr_org_code,
          pr_os_code,
          os_name,
          SUM (pr_receipts_total)                                 receipt_totals,
@@ -5119,7 +5119,7 @@ GROUP BY BACNT_BANK_CODE,
                      pr_os_code,
                  (SELECT os_name
                     FROM hi_org_structure
-                   WHERE os_code = NVL (ent_os_code, trn_os_code))
+                   WHERE os_code = NVL (trn_os_code, ent_os_code))
                      os_name,
                  0
                      pr_receipts_total,
