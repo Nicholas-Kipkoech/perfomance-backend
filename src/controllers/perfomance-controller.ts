@@ -5110,6 +5110,7 @@ ORDER BY pr_org_code, pr_os_code
         branchName: row[2],
         receiptTotal: row[3],
         totalPremium: row[4] + row[5] + row[6],
+        totalInvoiceAmt: 0,
       }));
 
       return res.status(200).json({ result: formattedData });
