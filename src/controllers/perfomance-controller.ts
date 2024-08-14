@@ -5112,7 +5112,7 @@ GROUP BY BACNT_BANK_CODE,
                    AND pr_int_ent_code = ent_code(+)
                    AND TRUNC (pr_gl_date) BETWEEN TRUNC ( :p_fm_dt)
                                               AND TRUNC ( :p_to_dt)
-                                              -- and NVL (ent_os_code, pr_os_code)=nvl(:branchCode,pr_os_code)
+                                             
           GROUP BY pr_org_code, NVL (ent_os_code, pr_os_code)
           UNION ALL
             SELECT trn_org_code
@@ -5173,7 +5173,7 @@ GROUP BY pr_org_code, pr_os_code, os_name
         p_currency: "",
         p_fm_dt: new Date(fromDate),
         p_to_dt: new Date(toDate),
-        branchCode: branchCode,
+        // branchCode: branchCode,
         p_org_code: "50",
       });
 
