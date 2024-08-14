@@ -75,4 +75,7 @@ perfomanceRouter.get("/management-expenses", (req, res) => {
 perfomanceRouter.get("/bank-balances", (req, res) => {
   perfomanceController.getBankBalances(req, res);
 });
+perfomanceRouter.get("/getBusinessSummaryPerBranch", (req, res) => {
+  perfomanceController.getBusinessSummaryPerBranch(req, res);
+});
 export default perfomanceRouter;

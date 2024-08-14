@@ -4967,6 +4967,166 @@ GROUP BY BACNT_BANK_CODE,
       }
     }
   }
+  async getBusinessSummaryPerBranch(req: Request, res: Response) {
+    let connection;
+    let results;
+    try {
+      connection = (await pool).getConnection();
+
+      const fromDate: string | any = req.query.fromDate;
+      const toDate: string | any = req.query.toDate;
+      const branchCode: string | any = req.query.branchCode;
+      console.log("connected to database");
+
+      // Construct SQL query with conditional parameter inclusion
+      let query = ` 
+  SELECT pr_org_code,
+         NVL (ent_os_code, pr_os_code)
+             pr_os_code,
+         (SELECT os_name
+            FROM hi_org_structure
+           WHERE os_code = NVL (ent_os_code, pr_os_code))
+             os_name,
+         (SELECT NVL (
+                     SUM (
+                           DECODE (
+                               :p_currency,
+                               NULL, (  NVL (rcp.trn_doc_fc_amt, 0)
+                                      * rcp.trn_cur_rate),
+                               NVL (rcp.trn_doc_fc_amt, 0))
+                         * DECODE (rcp.TRN_DRCR_FLAG,  'C', 1,  'D', -1,  0)),
+                     0)    credit_net
+            FROM all_entity a, GL_TRANSACTIONS rcp
+           WHERE     TRN_DOC_TYPE IN ('AR-RECEIPT', 'AR-RECEIPT-NS')
+                 AND trn_mgl_code = 'CA025'
+                 AND NVL (a.ent_os_code, trn_os_code) =
+                     NVL (g.ent_os_code, pr_os_code)
+                 AND a.ENT_AENT_CODE = trn_aent_code
+                 AND a.ENT_CODE = trn_ent_code
+                 AND TRUNC (trn_doc_gl_dt) BETWEEN :p_fm_dt AND :p_to_dt)
+             pr_receipts_total,
+         SUM (
+             NVL (
+                 CASE
+                     WHEN pr_net_effect IN ('Credit')
+                     THEN
+                         NVL (
+                             (  (DECODE (
+                                     :p_currency,
+                                     NULL, NVL (
+                                               (  NVL (pr_fc_prem, 0)
+                                                * pr_cur_rate),
+                                               0),
+                                     NVL (pr_fc_prem, 0)))
+                              * -1),
+                             0)
+                     ELSE
+                         NVL (
+                             DECODE (
+                                 :p_currency,
+                                 NULL, NVL (
+                                           (NVL (pr_fc_prem, 0) * pr_cur_rate),
+                                           0),
+                                 NVL (pr_fc_prem, 0)),
+                             0)
+                 END,
+                 0))
+             pr_lc_prem,
+         SUM (
+             NVL (
+                 CASE
+                     WHEN pr_net_effect IN ('Credit')
+                     THEN
+                         NVL (
+                             (  (DECODE (
+                                     :p_currency,
+                                     NULL, NVL (
+                                               (  NVL (pr_fc_eartquake, 0)
+                                                * pr_cur_rate),
+                                               0),
+                                     NVL (pr_fc_eartquake, 0)))
+                              * -1),
+                             0)
+                     ELSE
+                         NVL (
+                             DECODE (
+                                 :p_currency,
+                                 NULL, NVL (
+                                           (  NVL (pr_fc_eartquake, 0)
+                                            * pr_cur_rate),
+                                           0),
+                                 NVL (pr_fc_eartquake, 0)),
+                             0)
+                 END,
+                 0))
+             pr_lc_eartquake,
+         SUM (
+             NVL (
+                 CASE
+                     WHEN pr_net_effect IN ('Credit')
+                     THEN
+                         NVL (
+                             (  (DECODE (
+                                     :p_currency,
+                                     NULL, NVL (
+                                               (  NVL (pr_fc_political, 0)
+                                                * pr_cur_rate),
+                                               0),
+                                     NVL (pr_fc_political, 0)))
+                              * -1),
+                             0)
+                     ELSE
+                         NVL (
+                             DECODE (
+                                 :p_currency,
+                                 NULL, NVL (
+                                           (  NVL (pr_fc_political, 0)
+                                            * pr_cur_rate),
+                                           0),
+                                 NVL (pr_fc_political, 0)),
+                             0)
+                 END,
+                 0))
+             pr_lc_political
+    FROM uw_premium_register, all_entity g
+   WHERE     pr_org_code = :p_org_code
+         AND pr_int_aent_code = ent_aent_code(+)
+         AND pr_int_ent_code = ent_code(+)
+         and NVL (ent_os_code, pr_os_code) = nvl(:branchCode,pr_os_code)
+GROUP BY pr_org_code, NVL (ent_os_code, pr_os_code)
+ORDER BY pr_org_code, pr_os_code
+      `;
+
+      // Execute the query with parameters
+      results = (await connection).execute(query, {
+        p_currency: "",
+        p_fm_dt: new Date(fromDate),
+        p_to_dt: new Date(toDate),
+        branchCode: branchCode,
+        p_org_code: "50",
+      });
+
+      const formattedData = (await results).rows?.map((row: any) => ({
+        branchName: row[2],
+        receiptTotal: row[3],
+        totalPremium: row[4] + row[5] + row[6],
+      }));
+
+      return res.status(200).json({ result: formattedData });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: "Internal server error" });
+    } finally {
+      try {
+        if (connection) {
+          (await connection).close();
+          console.info("Connection closed successfully");
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  }
 }
 
 const performanceController = new PerformanceController();
