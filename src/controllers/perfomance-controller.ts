@@ -5215,6 +5215,335 @@ GROUP BY pr_org_code, pr_os_code, os_name
       }
     }
   }
+  async getCMpaidAndOuts(req: Request, res: Response) {
+    let connection;
+    let results;
+    try {
+      const fromDate: string | any = req.query.fromDate;
+      const toDate: string | any = req.query.toDate;
+      const branchCode: string | any = req.query.branchCode;
+      connection = (await pool).getConnection();
+      console.log("connected to database");
+
+      // Construct SQL query with conditional parameter inclusion
+      let query = `
+   /* Formatted on 8/18/2024 4:06:27 PM (QP5 v5.336) */
+  SELECT a.ent_os_code                                                branch_code,
+         a.branch_name                                                branch_name,
+         SUM (outstanding_amount)                                     outstanding_amount,
+         (NVL (SUM (paid_amount), 0) - NVL (SUM (hd_rcpt_amt), 0))    claim_paid
+    FROM (  SELECT DISTINCT
+                   a.hd_org_code,
+                   ent_os_code,
+                   PKG_sa.org_structure_name (hd_org_code, ent_os_code)
+                       branch_name,
+                   COUNT (cm_no)
+                       claims_count,
+                   0
+                       outstanding_amount,
+                   SUM (
+                       NVL (
+                           DECODE ( :p_currency, NULL, a.lc_amount, a.fc_amount),
+                           0))
+                       paid_amount
+              FROM cm_payments_vw   a,
+                   vw_premium_register c,
+                   (SELECT DISTINCT
+                           NVL (os_org_code, :p_org_code)    os_org_code,
+                           NVL (os_code, '100')              os_code,
+                           NVL (os_name, 'Un-Assigned')      os_name,
+                           NVL (ent_os_code, '100')          ent_os_code,
+                           NVL (
+                               DECODE (os_type,
+                                       'Branch', os_code,
+                                       os_ref_os_code),
+                               '100')                        os_ref_os_code,
+                           os_type,
+                           ent_code,
+                           ent_aent_code
+                      FROM hi_org_structure, all_entity
+                     WHERE ent_os_code = os_code(+)) b
+             WHERE     a.cm_int_aent_code = b.ent_aent_code
+                   AND a.cm_int_ent_code = b.ent_code
+                   AND a.hd_org_code = b.os_org_code
+                   AND hd_org_code = :p_org_code
+                   AND a.cm_pl_index = c.pr_pl_index
+                   AND a.cm_end_index = c.pr_end_index
+                   AND a.hd_cur_code = NVL ( :p_currency, a.hd_cur_code)
+                   AND TRUNC (a.hd_gl_date) BETWEEN NVL ( :p_fm_dt,
+                                                         TRUNC (a.hd_gl_date))
+                                                AND NVL ( :p_to_dt,
+                                                         TRUNC (a.hd_gl_date))
+          GROUP BY hd_org_code, ent_os_code) a,
+         --Query to fetch receipts'
+          (  SELECT DISTINCT
+                    a.hd_org_code,
+                    ent_os_code,
+                    PKG_sa.org_structure_name (hd_org_code, ent_os_code)
+                        branch_name,
+                    SUM (
+                        NVL (
+                            DECODE ( :p_currency, NULL, a.lc_amount, a.fc_amount),
+                            0))
+                        hd_rcpt_amt
+               FROM cm_recovery_receipts_vw a,
+                    (SELECT DISTINCT
+                            NVL (os_org_code, :p_org_code)    os_org_code,
+                            NVL (os_code, '100')              os_code,
+                            NVL (os_name, 'Un-Assigned')      os_name,
+                            NVL (ent_os_code, '100')          ent_os_code,
+                            NVL (
+                                DECODE (os_type,
+                                        'Branch', os_code,
+                                        os_ref_os_code),
+                                '100')                        os_ref_os_code,
+                            os_type,
+                            ent_code,
+                            ent_aent_code
+                       FROM hi_org_structure, all_entity
+                      WHERE ent_os_code = os_code(+)) b
+              WHERE     a.hd_org_code = :p_org_code
+                    AND a.cm_int_aent_code = b.ent_aent_code
+                    AND a.cm_int_ent_code = b.ent_code
+                    AND a.hd_org_code = b.os_org_code
+                    AND hd_cur_code = NVL ( :p_currency, hd_cur_code)
+                    AND TRUNC (a.hd_gl_date) BETWEEN NVL ( :p_fm_dt,
+                                                          TRUNC (a.hd_gl_date))
+                                                 AND NVL ( :p_to_dt,
+                                                          TRUNC (a.hd_gl_date))
+           GROUP BY hd_org_code, ent_os_code) b
+   WHERE     a.HD_ORG_CODE = b.HD_ORG_CODE(+)
+         AND a.ent_os_code = b.ent_os_code(+)
+         AND a.branch_name = b.branch_name(+)
+GROUP BY a.HD_ORG_CODE, a.ent_os_code, a.branch_name
+UNION ALL
+SELECT cm_os_code          branch_code,
+       branch_name,
+       od_reserve_amnt     outstanding_amount,
+       0                   claim_paid
+  FROM (  SELECT a.cm_org_code,
+                 a.cm_os_code,
+                 (SELECT REPLACE (INITCAP (os_name), 'Branch', '')
+                    FROM hi_org_structure
+                   WHERE os_code = a.cm_os_code)
+                     branch_name,
+                 (SELECT os_name
+                    FROM hi_org_structure
+                   WHERE os_code = (SELECT NVL (os_ref_os_code, os_code)
+                                      FROM hi_org_structure
+                                     WHERE os_code = cm_os_code))
+                     office_name,
+                 a.cm_index,
+                 a.cm_pl_index,
+                 a.cm_end_index,
+                 a.cm_no,
+                 NULL
+                     claim_type,
+                 a.cm_pl_no,
+                 NVL (a.cm_end_no, f.pr_end_no)
+                     cm_end_no,
+                 a.cm_pl_master_fm_dt,
+                 a.cm_pl_master_to_dt,
+                 a.cm_end_to_dt,
+                 a.cm_loss_date,
+                 TO_CHAR (a.cm_loss_date, 'Mon-RRRR')
+                     business_month,
+                 a.cm_int_date,
+                 a.created_on,
+                 INITCAP (
+                     pkg_system_admin.get_sc_cover_name (cr_org_code,
+                                                         cr_mc_code,
+                                                         b.cr_cc_code))
+                     cover,
+                 b.cr_cc_code,
+                 TO_CHAR (a.created_on, 'yyyy')
+                     cm_created_yr,
+                 b.cr_mc_code,
+                 INITCAP (
+                     pkg_system_admin.get_class_name (cr_org_code, cr_mc_code))
+                     class,
+                 b.cr_sc_code,
+                 pkg_system_admin.get_subclass_name (cr_org_code, cr_sc_code)
+                     sub_class,
+                 a.cm_int_aent_code,
+                 a.cm_int_ent_code,
+                 pkg_system_admin.get_entity_name (a.cm_int_aent_code,
+                                                   a.cm_int_ent_code)
+                     agent,
+                 a.cm_aent_code,
+                 a.cm_ent_code,
+                 pkg_system_admin.get_entity_name (a.cm_aent_code,
+                                                   a.cm_ent_code)
+                     insured,
+                 ch_status
+                     cm_status,
+                 a.cm_desc,
+                 a.cm_loss_cause,
+                 pkg_system_admin.get_system_desc ('CM_LOSS_CAUSE',
+                                                   a.cm_loss_cause)
+                     description_of_loss,
+                 TRUNC ( :p_fm_dt) - TRUNC (a.created_on) || ' Days'
+                     ageing,
+                 NVL (pr_lc_si, 0)
+                     pl_si,
+                 pr_bus_type,
+                 --NVL (gl.gl_closing_value, 0)  reserve_amnt,
+                 -- NVL (gl.sp_closing_value, 0) sp_reserve_amnt,
+                 NVL (all_reserve.tp_reserve_amnt, 0)
+                     tp_reserve_amnt,
+                 NVL (all_reserve.od_reserve_amnt, 0)
+                     od_reserve_amnt,
+                 all_reserve.reserve_type || ' RESERVE'
+                     reserve_type,
+                 ''
+                     action
+            --   g.ch_status
+            FROM cm_claims          a,
+                 cm_claims_risks    b,
+                 uw_premium_register f,
+                 all_entity         ent,
+                 (  SELECT eh_org_code,
+                           eh_cm_index,
+                           'OD'
+                               reserve_type,
+                           NVL (SUM (NVL (cm_closing_value, 0)), 0)
+                               od_reserve_amnt,
+                           0
+                               tp_reserve_amnt
+                      FROM (  SELECT DISTINCT
+                                     d.eh_org_code,
+                                     d.eh_cm_index,
+                                     d.eh_ce_index,
+                                     d.eh_status,
+                                     NVL (d.eh_new_lc_amount, 0)    cm_closing_value
+                                FROM cm_estimates_history d, cm_estimates de
+                               WHERE     d.EH_org_code = de.ce_org_code
+                                     AND d.EH_CM_INDEX = de.CE_CM_INDEX
+                                     AND d.EH_CE_INDEX = de.CE_INDEX
+                                     AND ce_code NOT IN
+                                             ('TP.001', 'TP.002', 'TP.003')
+                                     AND d.created_on =
+                                         (SELECT DISTINCT MAX (g.created_on)
+                                            FROM cm_estimates_history g
+                                           WHERE     TRUNC (g.created_on) <=
+                                                     TRUNC ( :p_fm_dt)
+                                                 AND g.eh_org_code = d.eh_org_code
+                                                 AND g.eh_cm_index = d.eh_cm_index
+                                                 AND g.eh_ce_index = d.eh_ce_index)
+                                     AND TRUNC (d.created_on) <=
+                                         TRUNC ( :p_fm_dt)
+                                     AND d.eh_status NOT IN
+                                             ('Closed', 'Fully Paid')
+                            ORDER BY d.eh_cm_index, d.eh_ce_index)
+                  GROUP BY eh_org_code, eh_cm_index
+                  UNION ALL
+                    SELECT eh_org_code,
+                           eh_cm_index,
+                           'TP'                                        reserve_type,
+                           0                                           od_reserve_amnt,
+                           NVL (SUM (NVL (cm_closing_value, 0)), 0)    tp_reserve_amnt
+                      FROM (  SELECT DISTINCT
+                                     d.eh_org_code,
+                                     d.eh_cm_index,
+                                     d.eh_ce_index,
+                                     d.eh_status,
+                                     NVL (d.eh_new_lc_amount, 0)    cm_closing_value
+                                FROM cm_estimates_history d, cm_estimates de
+                               WHERE     d.EH_org_code = de.ce_org_code
+                                     AND d.EH_CM_INDEX = de.CE_CM_INDEX
+                                     AND d.EH_CE_INDEX = de.CE_INDEX
+                                     AND ce_code IN ('TP.001', 'TP.002', 'TP.003')
+                                     AND d.created_on =
+                                         (SELECT DISTINCT MAX (g.created_on)
+                                            FROM cm_estimates_history g
+                                           WHERE     TRUNC (g.created_on) <=
+                                                     TRUNC ( :p_fm_dt)
+                                                 AND g.eh_org_code = d.eh_org_code
+                                                 AND g.eh_cm_index = d.eh_cm_index
+                                                 AND g.eh_ce_index = d.eh_ce_index)
+                                     AND TRUNC (d.created_on) <= TRUNC ( :p_fm_dt)
+                                     AND d.eh_status NOT IN
+                                             ('Closed', 'Fully Paid')
+                            ORDER BY d.eh_cm_index, d.eh_ce_index)
+                  GROUP BY eh_org_code, eh_cm_index) all_reserve,
+                 (SELECT DISTINCT a.ch_org_code,
+                                  a.ch_cm_index,
+                                  a.created_on,
+                                  a.ch_status
+                    FROM cm_claims_history a
+                   WHERE a.created_on =
+                         (SELECT DISTINCT MAX (b.created_on)
+                            FROM cm_claims_history b
+                           WHERE     TRUNC (b.created_on) <= TRUNC ( :p_fm_dt)
+                                 AND b.ch_org_code = a.ch_org_code
+                                 AND b.ch_cm_index = a.ch_cm_index)) g
+           WHERE     a.cm_org_code = :p_org_code
+                 AND a.cm_org_code = b.cr_org_code
+                 AND a.cm_index = b.cr_cm_index
+                 AND a.cm_int_aent_code = ent.ent_aent_code(+)
+                 AND a.cm_int_ent_code = ent.ent_code(+)
+                 AND NVL (pr_bus_type, 'bus_type') =
+                     NVL ( :p_bus_type, NVL (pr_bus_type, 'bus_type'))
+                 AND a.cm_org_code = f.pr_org_code(+)
+                 AND a.cm_pl_index = f.pr_pl_index(+)
+                 AND a.cm_end_index = f.pr_end_index(+)
+                 AND b.cr_mc_code = f.pr_mc_code(+)
+                 AND b.cr_sc_code = f.pr_sc_code(+)
+                 AND a.cm_org_code = g.ch_org_code
+                 AND a.cm_index = g.ch_cm_index
+                 AND b.cr_org_code = all_reserve.eh_org_code
+                 AND b.cr_cm_index = all_reserve.eh_cm_index
+                 /* and  a.cm_org_code=gl.trn_org_code (+)
+                 and a.cm_index=gl.trn_claim_index(+)
+                  /* AND gl.trn_org_code = a.cm_org_code
+                   AND gl.trn_claim_index = a.cm_index*/
+                 AND g.ch_status NOT IN ('Closed', 'Closed - No Claim')
+                 AND NVL (all_reserve.tp_reserve_amnt, 0) >= 0
+                 AND NVL (all_reserve.od_reserve_amnt, 0) >= 0
+                 AND a.cm_register = 'Y'
+        ORDER BY CASE
+                     WHEN (SUBSTR (a.cm_no,
+                                   LENGTH (a.cm_no) - 1,
+                                   LENGTH (a.cm_no))) BETWEEN '85'
+                                                          AND '99'
+                     THEN
+                         1
+                     ELSE
+                         2
+                 END,
+                 (SUBSTR (a.cm_no, LENGTH (a.cm_no) - 1, LENGTH (a.cm_no))),
+                 a.cm_no ASC)
+      `;
+
+      // Execute the query with parameters
+      results = (await connection).execute(query, {
+        p_org_code: "50",
+
+        p_bus_type: "",
+        p_currency: "",
+        p_fm_dt: new Date(fromDate),
+        p_to_dt: new Date(toDate),
+      });
+
+      const formattedData = (await results).rows?.map((row: any) => ({
+        transactionAmt: row[11],
+      }));
+
+      return res.status(200).json({ result: formattedData });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: "Internal server error" });
+    } finally {
+      try {
+        if (connection) {
+          (await connection).close();
+          console.info("Connection closed successfully");
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  }
 }
 
 const performanceController = new PerformanceController();
