@@ -5226,7 +5226,7 @@ GROUP BY pr_org_code, pr_os_code, os_name
 
       // Construct SQL query with conditional parameter inclusion
       let query = `
-  /* Formatted on 8/19/2024 10:10:34 AM (QP5 v5.336) */
+  /* Formatted on 8/19/2024 11:05:06 AM (QP5 v5.336) */
   SELECT branch_code,
          branch_name,
          SUM (outstanding_amount),
@@ -5342,10 +5342,10 @@ GROUP BY pr_org_code, pr_os_code, os_name
                    AND a.branch_name = b.branch_name(+)
           GROUP BY a.HD_ORG_CODE, a.ent_os_code, a.branch_name
           UNION ALL
-          SELECT cm_os_code          branch_code,
+          SELECT cm_os_code                              branch_code,
                  branch_name,
-                 od_reserve_amnt     outstanding_amount,
-                 0                   claim_paid
+                 (od_reserve_amnt + tp_reserve_amnt)     outstanding_amount,
+                 0                                       claim_paid
             FROM (  SELECT a.cm_org_code,
                            a.cm_os_code,
                            PKG_sa.org_structure_name (cm_org_code, a.cm_os_code)
