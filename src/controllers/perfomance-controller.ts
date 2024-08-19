@@ -5594,13 +5594,11 @@ GROUP BY branch_code, branch_name
 
       // Construct SQL query with conditional parameter inclusion
       let query = `
-  /* Formatted on 8/19/2024 2:55:41 PM (QP5 v5.336) */
+  /* Formatted on 8/19/2024 3:43:32 PM (QP5 v5.336) */
   SELECT    hd_aent_code
          || '-'
          || PKG_SYSTEM_ADMIN.GET_ENT_CATG_NAME (hd_aent_code)
              INT_CATEGORY,
-         pkg_system_admin.get_branch_grp_name (hd_os_code)
-             branch_group,
          SUM (hd_fc_amount)
              hd_fc_amount,
          SUM (hd_payable_fc_amt)
@@ -5805,9 +5803,7 @@ GROUP BY branch_code, branch_name
                  AND TRUNC (hd_gl_date) BETWEEN TRUNC ( :p_fm_dt)
                                             AND TRUNC ( :p_to_dt))
    WHERE paid = 0
-GROUP BY hd_aent_code,
-         pkg_system_admin.get_branch_grp_name (hd_os_code),
-         int_category
+GROUP BY hd_aent_code, int_category
   
       `;
 
@@ -5821,8 +5817,7 @@ GROUP BY hd_aent_code,
 
       const formattedData = (await results).rows?.map((row: any) => ({
         category: row[0],
-        branchGroup: row[1],
-        amountToPay: row[3],
+        amountToPay: row[2],
       }));
 
       return res.status(200).json({ result: formattedData });
