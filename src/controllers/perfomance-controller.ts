@@ -3343,7 +3343,6 @@ UNION
 GROUP BY 10, cm_org_code, cm_os_code
 ORDER BY cm_order_no
       `;
-
       const _fromDate = new Date(fromDate);
       const _toDate = new Date(toDate);
 
@@ -5227,7 +5226,6 @@ GROUP BY pr_org_code, pr_os_code, os_name
 
       // Construct SQL query with conditional parameter inclusion
       let query = `
-   /* Formatted on 8/18/2024 4:06:27 PM (QP5 v5.336) */
   SELECT a.ent_os_code                                                branch_code,
          a.branch_name                                                branch_name,
          SUM (outstanding_amount)                                     outstanding_amount,
@@ -5513,12 +5511,12 @@ SELECT cm_os_code          branch_code,
                  END,
                  (SUBSTR (a.cm_no, LENGTH (a.cm_no) - 1, LENGTH (a.cm_no))),
                  a.cm_no ASC)
+  
       `;
 
       // Execute the query with parameters
       results = (await connection).execute(query, {
         p_org_code: "50",
-
         p_bus_type: "",
         p_currency: "",
         p_fm_dt: new Date(fromDate),
@@ -5526,7 +5524,10 @@ SELECT cm_os_code          branch_code,
       });
 
       const formattedData = (await results).rows?.map((row: any) => ({
-        transactionAmt: row[11],
+        branchCode: row[0],
+        branchName: row[1],
+        outstandingAmount: row[2],
+        claimPaid: row[3],
       }));
 
       return res.status(200).json({ result: formattedData });
