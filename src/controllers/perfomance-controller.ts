@@ -5582,6 +5582,264 @@ GROUP BY branch_code, branch_name
       }
     }
   }
+  async getUnpaidBills(req: Request, res: Response) {
+    let connection;
+    let results;
+    try {
+      const fromDate: string | any = req.query.fromDate;
+      const toDate: string | any = req.query.toDate;
+      const branchCode: string | any = req.query.branchCode;
+      connection = (await pool).getConnection();
+      console.log("connected to database");
+
+      // Construct SQL query with conditional parameter inclusion
+      let query = `
+  /* Formatted on 8/19/2024 2:55:41 PM (QP5 v5.336) */
+  SELECT    hd_aent_code
+         || '-'
+         || PKG_SYSTEM_ADMIN.GET_ENT_CATG_NAME (hd_aent_code)
+             INT_CATEGORY,
+         pkg_system_admin.get_branch_grp_name (hd_os_code)
+             branch_group,
+         SUM (hd_fc_amount)
+             hd_fc_amount,
+         SUM (hd_payable_fc_amt)
+             hd_payable_fc_amt,
+         SUM (ch_vat_amt_fc)
+             ch_vat_amt_fc,
+         SUM (ch_wtax_amt_fc)
+             ch_wtax_amt_fc
+    FROM (SELECT a.hd_org_code,
+                 dd.hd_gl_date,
+                 INITCAP (dd.hd_type)
+                     bill_type,
+                 a.HD_SUP_DOC_REF_NO,
+                 ROUND ((TRUNC (SYSDATE) - TRUNC (TO_DATE (a.hd_gl_date))))
+                     ageing,
+                 PKG_SYSTEM_ADMIN.GET_USER_NAME (dd.created_by)
+                     created_by,
+                 CASE
+                     WHEN (    dd.hd_cm_index IS NOT NULL
+                           AND dd.hd_ce_index IS NOT NULL)
+                     THEN
+                         'CLAIM BILLS'
+                     ELSE
+                         'GENERAL BILLS'
+                 END
+                     hd_source,
+                 dd.hd_no
+                     hd_pmt_no,
+                 NVL (
+                     (SELECT ent_os_code
+                        FROM all_entity
+                       WHERE     ent_aent_code =
+                                 NVL (cm_int_aent_code, a.hd_aent_code)
+                             AND ent_code =
+                                 NVL (cm_int_ent_code, a.hd_ent_code)),
+                     a.hd_os_code)
+                     hd_os_code,
+                 (SELECT NVL (
+                             SUM (
+                                 DECODE (hd_mode,
+                                         'CHEQUE', ee.LN_CHQ_FC_AMT,
+                                         d.hd_payable_fc_amt)),
+                             0)    paid
+                    FROM ap_payments_header d, ap_cheques_lines ee
+                   WHERE     d.hd_posted = 'Y'
+                         AND hd_no = ln_pmt_no(+)
+                         AND NVL (
+                                 CASE
+                                     WHEN     d.hd_status = 'Completed'
+                                          AND d.hd_mode = 'CHEQUE'
+                                     THEN
+                                         DECODE (ee.ln_chq_status,
+                                                 'Written', 'Y',
+                                                 'N')
+                                     WHEN     d.hd_status = 'Cancelled'
+                                          AND d.hd_mode = 'CHEQUE'
+                                     THEN
+                                         'Y'
+                                     WHEN d.hd_mode NOT IN ('CHEQUE')
+                                     THEN
+                                         'Y'
+                                 END,
+                                 'Y') =
+                             'Y'
+                         AND hd_no = a.hd_pmt_no
+                         AND d.hd_org_code = a.hd_org_code)
+                     paid,
+                 a.hd_no,
+                 a.hd_aent_code,
+                 a.hd_ent_code,
+                 pkg_system_admin.get_entity_name (a.hd_aent_code,
+                                                   a.hd_ent_code)
+                     hd_payee_name,
+                    a.hd_aent_code
+                 || '-'
+                 || PKG_SYSTEM_ADMIN.GET_ENT_CATG_NAME (a.hd_aent_code)
+                     INT_CATEGORY,
+                 hd_claim_no,
+                 a.hd_fc_amount * DECODE ( :p_currency, NULL, 1, a.hd_cur_rate)
+                     hd_fc_amount,
+                   a.hd_payable_fc_amt
+                 * DECODE ( :p_currency, NULL, 1, a.hd_cur_rate)
+                     hd_payable_fc_amt,
+                 ch_vat_amt_fc * DECODE ( :p_currency, NULL, 1, a.hd_cur_rate)
+                     ch_vat_amt_fc,
+                 ch_wtax_amt_fc * DECODE ( :p_currency, NULL, 1, a.hd_cur_rate)
+                     ch_wtax_amt_fc
+            FROM ap_invoices_header a,
+                 (  SELECT ch_org_code,
+                           ch_hd_no,
+                           SUM (
+                               CASE
+                                   WHEN (ch_type = 'WITHHOLD TAX') THEN 0
+                                   ELSE ch_fc_amt
+                               END)    ch_vat_amt_fc,
+                           SUM (
+                               CASE
+                                   WHEN (ch_type != 'WITHHOLD TAX') THEN 0
+                                   ELSE ch_fc_amt
+                               END)    ch_wtax_amt_fc
+                      FROM ap_invoices_charges
+                  GROUP BY ch_org_code, ch_hd_no) b,
+                 ap_payments_header dd,
+                 cm_claims         c
+           WHERE     a.hd_org_code = :p_org_code
+                 AND a.hd_org_code = ch_org_code(+)
+                 AND a.hd_no = ch_hd_no(+)
+                 AND a.hd_org_code = dd.hd_org_code
+                 AND a.hd_pmt_no = dd.hd_no
+                 AND a.hd_org_code = c.cm_org_code(+)
+                 AND a.hd_claim_index = c.cm_index(+)
+                 AND dd.hd_status != 'Cancelled'
+                 AND a.hd_posted = 'Y'
+                 AND a.hd_cur_code = NVL ( :p_currency, a.hd_cur_code)
+                 AND TRUNC (dd.hd_gl_date) BETWEEN TRUNC ( :p_fm_dt)
+                                               AND TRUNC ( :p_to_dt)
+          UNION ALL
+          SELECT hd_org_code,
+                 hd_gl_date,
+                 INITCAP (hd_type)
+                     bill_type,
+                 NULL
+                     HD_SUP_DOC_REF_NO,
+                 ROUND ((SYSDATE - TO_DATE (dd.created_on)))
+                     ageing,
+                 PKG_SYSTEM_ADMIN.GET_USER_NAME (dd.created_by)
+                     created_by,
+                 'CLAIM BILLS'
+                     hd_source,
+                 hd_no
+                     hd_pmt_no,
+                 NVL (
+                     (SELECT ent_os_code
+                        FROM all_entity
+                       WHERE     ent_aent_code = cm_int_aent_code
+                             AND ent_code = cm_int_ent_code),
+                     cm_os_code)
+                     hd_os_code,
+                 (SELECT NVL (
+                             SUM (
+                                 DECODE (hd_mode,
+                                         'CHEQUE', ee.LN_CHQ_FC_AMT,
+                                         d.hd_payable_fc_amt)),
+                             0)    paid
+                    FROM ap_payments_header d, ap_cheques_lines ee
+                   WHERE     d.hd_posted = 'Y'
+                         AND hd_no = ln_pmt_no(+)
+                         AND NVL (
+                                 CASE
+                                     WHEN     d.hd_status = 'Completed'
+                                          AND d.hd_mode = 'CHEQUE'
+                                     THEN
+                                         DECODE (ee.ln_chq_status,
+                                                 'Written', 'Y',
+                                                 'N')
+                                     WHEN     d.hd_status = 'Cancelled'
+                                          AND d.hd_mode = 'CHEQUE'
+                                     THEN
+                                         'Y'
+                                     WHEN d.hd_mode NOT IN ('CHEQUE')
+                                     THEN
+                                         'Y'
+                                 END,
+                                 'Y') =
+                             'Y'
+                         AND hd_no = dd.hd_no
+                         AND d.hd_org_code = :p_org_code)
+                     paid,
+                 (SELECT dv_no
+                    FROM cm_documents
+                   WHERE dv_hd_no = dd.hd_no)
+                     hd_no,
+                 hd_aent_code,
+                 hd_ent_code,
+                 pkg_system_admin.get_entity_name (hd_aent_code, hd_ent_code)
+                     hd_ent_code_xx,
+                    hd_aent_code
+                 || '-'
+                 || PKG_SYSTEM_ADMIN.GET_ENT_CATG_NAME (hd_aent_code)
+                     INT_CATEGORY,
+                 cm_no,
+                 DECODE ( :p_currency, NULL, hd_fc_amount, hd_lc_amount)
+                     hd_fc_amount,
+                 DECODE ( :p_currency,
+                         NULL, HD_PAYABLE_FC_AMT,
+                         HD_PAYABLE_LC_AMT)
+                     hd_fc_payable,
+                 0
+                     ch_vat_amt_fc,
+                 0
+                     ch_wtax_amt_fc
+            FROM cm_claims, ap_payments_header dd
+           WHERE     hd_org_code = :p_org_code
+                 --AND dv_status = 'Returned'
+                 AND hd_cur_code = NVL ( :p_currency, hd_cur_code)
+                 AND cm_index = hd_cm_index
+                 AND hd_no NOT IN (SELECT hd_pmt_no
+                                     FROM ap_invoices_header
+                                    WHERE hd_pmt_no IS NOT NULL)
+                 AND hd_ce_index IS NOT NULL
+                 AND hd_status != 'Cancelled'
+                 AND TRUNC (hd_gl_date) BETWEEN TRUNC ( :p_fm_dt)
+                                            AND TRUNC ( :p_to_dt))
+   WHERE paid = 0
+GROUP BY hd_aent_code,
+         pkg_system_admin.get_branch_grp_name (hd_os_code),
+         int_category
+  
+      `;
+
+      // Execute the query with parameters
+      results = (await connection).execute(query, {
+        p_org_code: "50",
+        p_currency: "",
+        p_fm_dt: new Date(fromDate),
+        p_to_dt: new Date(toDate),
+      });
+
+      const formattedData = (await results).rows?.map((row: any) => ({
+        category: row[0],
+        branchGroup: row[1],
+        amountToPay: row[3],
+      }));
+
+      return res.status(200).json({ result: formattedData });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: "Internal server error" });
+    } finally {
+      try {
+        if (connection) {
+          (await connection).close();
+          console.info("Connection closed successfully");
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  }
 }
 
 const performanceController = new PerformanceController();

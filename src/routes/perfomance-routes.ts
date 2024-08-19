@@ -81,4 +81,7 @@ perfomanceRouter.get("/getBusinessSummaryPerBranch", (req, res) => {
 perfomanceRouter.get("/CMpaidAndOuts", (req, res) => {
   perfomanceController.getCMpaidAndOuts(req, res);
 });
+perfomanceRouter.get("/unpaidBills", (req, res) => {
+  perfomanceController.getUnpaidBills(req, res);
+});
 export default perfomanceRouter;
