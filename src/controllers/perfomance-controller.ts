@@ -2743,7 +2743,7 @@ ORDER BY pr_mc_code
 
       // Construct SQL query with conditional parameter inclusion
       let query = `
-        /* Formatted on 8/18/2024 3:57:55 PM (QP5 v5.336) */
+        /* Formatted on 8/21/2024 9:47:53 AM (QP5 v5.336) */
   SELECT cm_order_no,
          cm_org_code,
          NVL (SUM (DECODE (cm_mc_code, '01', NVL (cm_lc_amount, 0))), 0)
@@ -2783,7 +2783,7 @@ ORDER BY pr_mc_code
                                  9,
                                  10)
 GROUP BY cm_order_no, cm_org_code,cm_os_code
-UNION ALL
+UNION
   SELECT cm_order_no,
          cm_org_code,
          NVL (SUM (DECODE (cm_mc_code, '01', NVL (cm_lc_amount, 0))), 0)
@@ -2819,7 +2819,7 @@ UNION ALL
          AND cm_order_no IN (2)
          AND cm_year = TO_CHAR ( :p_fm_dt, 'yyyy')
 GROUP BY cm_order_no, cm_org_code,cm_os_code
-UNION ALL
+UNION
   SELECT cm_order_no,
          cm_org_code,
          NVL (SUM (DECODE (cm_mc_code, '01', NVL (cm_lc_amount, 0))), 0)
@@ -2855,7 +2855,7 @@ UNION ALL
          AND cm_order_no IN (4)
          AND cm_year = TO_CHAR ( :p_to_dt, 'yyyy')
 GROUP BY cm_order_no, cm_org_code,cm_os_code
-UNION ALL
+UNION
   SELECT 9               cm_order_no,
          cm_org_code,
          ROUND (
@@ -3340,7 +3340,7 @@ UNION
          AND cm_year BETWEEN TO_CHAR ( :p_fm_dt, 'yyyy')
                          AND TO_CHAR ( :p_to_dt, 'yyyy')
          AND cm_order_no IN (1, 8)
-GROUP BY 10, cm_org_code, cm_os_code
+GROUP BY 10, cm_org_code,cm_os_code
 ORDER BY cm_order_no
       `;
       const _fromDate = new Date(fromDate);
