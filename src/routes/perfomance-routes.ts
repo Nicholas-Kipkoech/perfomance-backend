@@ -52,6 +52,9 @@ perfomanceRouter.get("/AR-receipts", (req, res) => {
 perfomanceRouter.get("/cm-loss-ratio", (req, res) => {
   perfomanceController.getCMLossRatio(req, res);
 });
+perfomanceRouter.get("/cm-loss-ratio2", (req, res) => {
+  perfomanceController.getCMLossRatio2(req, res);
+});
 
 perfomanceRouter.get("/ri-cessions", (req, res) => {
   perfomanceController.getRICessionsPrem(req, res);
