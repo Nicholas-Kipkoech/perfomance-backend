@@ -6216,14 +6216,14 @@ GROUP BY branch_code, branch_name
     try {
       const fromDate: string | any = req.query.fromDate;
       const toDate: string | any = req.query.toDate;
-      const branchCode: string | any = req.query.branchCode;
+      const category: string | any = req.query.category;
       connection = (await pool).getConnection();
       console.log("connected to database");
 
       // Construct SQL query with conditional parameter inclusion
       let query = `
   /* Formatted on 8/19/2024 3:43:32 PM (QP5 v5.336) */
-  SELECT    hd_aent_code
+  SELECT  HD_PAYEE_NAME,  hd_aent_code
          || '-'
          || PKG_SYSTEM_ADMIN.GET_ENT_CATG_NAME (hd_aent_code)
              INT_CATEGORY,
@@ -6341,6 +6341,7 @@ GROUP BY branch_code, branch_name
                  AND dd.hd_status != 'Cancelled'
                  AND a.hd_posted = 'Y'
                  AND a.hd_cur_code = NVL ( :p_currency, a.hd_cur_code)
+                  and a.HD_AENT_CODE=nvl(:category,a.hd_aent_code)
                  AND TRUNC (dd.hd_gl_date) BETWEEN TRUNC ( :p_fm_dt)
                                                AND TRUNC ( :p_to_dt)
           UNION ALL
@@ -6428,10 +6429,11 @@ GROUP BY branch_code, branch_name
                                     WHERE hd_pmt_no IS NOT NULL)
                  AND hd_ce_index IS NOT NULL
                  AND hd_status != 'Cancelled'
+                 and hd_aent_code=nvl(:category,hd_aent_code)
                  AND TRUNC (hd_gl_date) BETWEEN TRUNC ( :p_fm_dt)
                                             AND TRUNC ( :p_to_dt))
    WHERE paid = 0
-GROUP BY hd_aent_code, int_category
+GROUP BY hd_aent_code, int_category,HD_PAYEE_NAME
   
       `;
 
@@ -6441,11 +6443,13 @@ GROUP BY hd_aent_code, int_category
         p_currency: "",
         p_fm_dt: new Date(fromDate),
         p_to_dt: new Date(toDate),
+        category: category,
       });
 
       const formattedData = (await results).rows?.map((row: any) => ({
-        category: row[0],
-        amountToPay: row[2],
+        payee_name: row[0],
+        category: row[1],
+        amountToPay: row[3],
       }));
 
       return res.status(200).json({ result: formattedData });
