@@ -6467,6 +6467,42 @@ GROUP BY hd_aent_code, int_category,HD_PAYEE_NAME
       }
     }
   }
+  async getINTData(req: Request, res: Response) {
+    let connection;
+    let results;
+    try {
+      connection = (await pool).getConnection();
+      console.log("connected to database");
+
+      // Construct SQL query with conditional parameter inclusion
+      let query = `
+  select  ent_name,ent_code from all_entity where ent_aent_code ='80'
+  
+      `;
+
+      // Execute the query with parameters
+      results = (await connection).execute(query);
+
+      const formattedData = (await results).rows?.map((row: any) => ({
+        entityName: row[0],
+        entityCode: row[1],
+      }));
+
+      return res.status(200).json({ result: formattedData });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: "Internal server error" });
+    } finally {
+      try {
+        if (connection) {
+          (await connection).close();
+          console.info("Connection closed successfully");
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  }
 }
 
 const performanceController = new PerformanceController();

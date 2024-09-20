@@ -87,4 +87,7 @@ perfomanceRouter.get("/CMpaidAndOuts", (req, res) => {
 perfomanceRouter.get("/unpaidBills", (req, res) => {
   perfomanceController.getUnpaidBills(req, res);
 });
+perfomanceRouter.get("/entData", (req, res) => {
+  perfomanceController.getINTData(req, res);
+});
 export default perfomanceRouter;
